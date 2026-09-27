@@ -22,6 +22,7 @@ var _done := false             ## result panel showing
 var _result := 0.0
 var _font: Font
 var _panel: Control
+var _early_at := -10000         ## ticks (ms) of the last tap made during the count-in
 
 
 func _ready() -> void:
@@ -108,6 +109,7 @@ func _unhandled_input(e: InputEvent) -> void:
 func _tap() -> void:
 	var b := Conductor.nearest_beat()
 	if b < COUNT_IN:
+		_early_at = Time.get_ticks_msec()   # shows "not yet"
 		return
 	var err := Conductor.timing_error_raw(float(b))   # vs the beat on the audio clock
 	if absf(err) > Conductor.seconds_per_beat * 0.45:
@@ -142,18 +144,25 @@ func _draw() -> void:
 	if _done:
 		_draw_strip(cx, 250.0)
 		return
-	_text("Listen to the clicks and tap SPACE exactly on each one.", Vector2(0, 150), 24, INK, vp.x)
+	_text("Listen to the clicks. After the count-in, tap SPACE on every click.", Vector2(0, 150), 24, INK, vp.x)
 	_text("Don't watch the screen -- go by sound.", Vector2(0, 182), 20, Color(INK, 0.7), vp.x)
 
-	# beat light, so you can tell it's running (count-in shown as 1-2-3-4)
 	var beats := Conductor.song_position_in_beats
 	var pulse := clampf(1.0 - fposmod(beats, 1.0) * 4.0, 0.0, 1.0)
-	draw_circle(Vector2(cx, 250), 18.0 + 8.0 * pulse, Color(0.85, 0.42, 0.2, 0.35 + 0.65 * pulse))
-	if beats >= 0.0 and beats < COUNT_IN:
-		_text(str(int(beats) + 1), Vector2(0, 320), 28, INK, vp.x)
-
-	_draw_strip(cx, 390.0)
-	_text("Taps: %d / %d" % [_taps.size(), TAPS_NEEDED], Vector2(0, 470), 26, INK, vp.x)
+	var counting := beats < COUNT_IN - 0.5   # taps count from the click after "4"
+	if counting:
+		# big 1-2-3-4, clearly a lead-in: just listen
+		var n := clampi(int(floor(beats)) + 1, 1, COUNT_IN) if beats >= 0.0 else 1
+		_text(str(n), Vector2(0, 330), int(96 + 24 * pulse), Color(0.85, 0.42, 0.2), vp.x)
+		_text("Get ready -- just listen", Vector2(0, 385), 26, INK, vp.x)
+		_text("Start tapping on the click after 4", Vector2(0, 420), 20, Color(INK, 0.7), vp.x)
+		if Time.get_ticks_msec() - _early_at < 700:
+			_text("Not yet -- wait for the count!", Vector2(0, 490), 24, Color(0.75, 0.25, 0.2), vp.x)
+	else:
+		draw_circle(Vector2(cx, 250), 18.0 + 8.0 * pulse, Color(0.85, 0.42, 0.2, 0.35 + 0.65 * pulse))
+		_text("Now tap on every click!", Vector2(0, 320), 34, Color(0.25, 0.5, 0.2), vp.x)
+		_draw_strip(cx, 400.0)
+		_text("Taps: %d / %d" % [_taps.size(), TAPS_NEEDED], Vector2(0, 480), 26, INK, vp.x)
 	_text("Esc  skip for now", Vector2(0, 610), 16, Color(INK, 0.5), vp.x)
 
 
