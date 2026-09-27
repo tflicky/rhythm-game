@@ -144,7 +144,7 @@ func _draw() -> void:
 	if _done:
 		_draw_strip(cx, 250.0)
 		return
-	_text("Listen to the clicks. After the count-in, tap SPACE on every click.", Vector2(0, 150), 24, INK, vp.x)
+	_text("Listen to the clicks and tap SPACE on every click.", Vector2(0, 150), 24, INK, vp.x)
 	_text("Don't watch the screen -- go by sound.", Vector2(0, 182), 20, Color(INK, 0.7), vp.x)
 
 	var beats := Conductor.song_position_in_beats
