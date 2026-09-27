@@ -47,7 +47,8 @@ func _ready() -> void:
 		Conductor.bpm = beatmap.bpm
 		Conductor.first_beat_offset = beatmap.first_beat_offset
 		Conductor.video_offset = beatmap.video_offset
-		Conductor.input_offset = beatmap.input_offset
+		# this computer's calibration (main menu -> Calibrate timing) wins
+		Conductor.input_offset = Settings.input_offset(beatmap.input_offset)
 		_cues = beatmap.compiled(Conductor)
 		print("[rhythm] loaded '%s': %d cues @ %.1f BPM" % [
 			beatmap.song_title, _cues.size(), beatmap.bpm])

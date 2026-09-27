@@ -70,6 +70,22 @@ func _ready() -> void:
 		col.add_child(row)
 		_buttons.append(b)
 
+	# smaller settings button under the levels, lined up with them
+	var cal_state := "%+d ms" % roundi(Settings.input_offset() * 1000.0) \
+		if Settings.has_input_offset() else "not set"
+	var cal := _make_button({"title": "Calibrate Timing  (%s)" % cal_state,
+		"scene": "res://Calibrate.tscn", "color": Color(0.42, 0.5, 0.62)})
+	cal.custom_minimum_size = Vector2(460, 56)
+	cal.add_theme_font_size_override("font_size", 20)
+	var cal_row := HBoxContainer.new()
+	cal_row.add_theme_constant_override("separation", 16)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(ICON_SIZE.x, 0)
+	cal_row.add_child(spacer)
+	cal_row.add_child(cal)
+	col.add_child(cal_row)
+	_buttons.append(cal)
+
 	var hint := Label.new()
 	hint.text = "Up/Down to choose  -  Enter to play  -  Esc in a level returns here"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
