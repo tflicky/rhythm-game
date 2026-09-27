@@ -4,6 +4,10 @@ class_name Settings
 
 const PATH := "user://settings.cfg"
 
+## Set once the first-launch calibration has been offered this session, so
+## skipping it (Esc) doesn't bounce the player straight back to it.
+static var calibration_offered := false
+
 
 ## Measured input + audio delay for this computer, in seconds; `fallback` if
 ## the player has never calibrated.

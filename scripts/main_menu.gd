@@ -28,6 +28,11 @@ var _buttons: Array[Button] = []
 
 
 func _ready() -> void:
+	# First launch on this computer: calibrate timing before anything else.
+	if not Settings.has_input_offset() and not Settings.calibration_offered:
+		Settings.calibration_offered = true
+		get_tree().change_scene_to_file.call_deferred("res://Calibrate.tscn")
+		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()
