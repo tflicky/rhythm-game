@@ -199,26 +199,22 @@ func _opaque_bbox(tex: Texture2D) -> Rect2:
 	return Rect2(r) if r.size != Vector2i.ZERO else Rect2(Vector2.ZERO, tex.get_size())
 
 
+## Uses ResourceLoader.list_directory, not DirAccess: in an exported game the
+## folders hold only *.import stubs (the PNGs/WAVs themselves aren't packed),
+## so a plain directory listing finds nothing there.
 func _scan_dir(dir_path: String, exts: Array) -> Dictionary:
 	var out := {}
-	var d := DirAccess.open(dir_path)
-	if d == null:
-		return out
-	d.list_dir_begin()
-	var entry := d.get_next()
-	while entry != "":
-		var full := dir_path.path_join(entry)
-		if d.current_is_dir():
+	for entry in ResourceLoader.list_directory(dir_path):
+		var full := dir_path.path_join(entry.trim_suffix("/"))
+		if entry.ends_with("/"):
 			if not entry.begins_with("."):
 				out.merge(_scan_dir(full, exts), true)
-		elif not entry.ends_with(".import"):
-			var stem := entry
-			while stem.get_extension().to_lower() in exts:
-				stem = stem.get_basename()
-			if ResourceLoader.exists(full):
-				out[stem] = full
-		entry = d.get_next()
-	d.list_dir_end()
+			continue
+		var stem := entry
+		while stem.get_extension().to_lower() in exts:
+			stem = stem.get_basename()
+		if stem != entry and ResourceLoader.exists(full):
+			out[stem] = full
 	return out
 
 
