@@ -1,0 +1,138 @@
+[gd_resource type="Resource" script_class="Beatmap" format=3]
+
+[ext_resource type="Script" path="res://scripts/beatmap.gd" id="1_bm"]
+
+[resource]
+script = ExtResource("1_bm")
+song_title = "Rhythm Game"
+input_offset = 0.131
+cues = [{
+"beat": 17.0,
+"cue": "catch"
+}, {
+"beat": 21.0,
+"cue": "catch"
+}, {
+"beat": 25.0,
+"cue": "catch"
+}, {
+"beat": 30.0,
+"cue": "catch"
+}, {
+"beat": 31.0,
+"cue": "catch"
+}, {
+"beat": 33.0,
+"cue": "catch"
+}, {
+"beat": 37.0,
+"cue": "catch"
+}, {
+"beat": 41.0,
+"cue": "catch"
+}, {
+"beat": 46.0,
+"cue": "catch"
+}, {
+"beat": 47.0,
+"cue": "catch"
+}, {
+"beat": 49.0,
+"cue": "catch"
+}, {
+"beat": 53.0,
+"cue": "catch"
+}, {
+"beat": 57.0,
+"cue": "catch"
+}, {
+"beat": 62.0,
+"cue": "catch"
+}, {
+"beat": 63.0,
+"cue": "catch"
+}, {
+"beat": 65.0,
+"cue": "catch"
+}, {
+"beat": 69.0,
+"cue": "catch"
+}, {
+"beat": 73.0,
+"cue": "catch"
+}, {
+"beat": 78.0,
+"cue": "catch"
+}, {
+"beat": 79.0,
+"cue": "catch"
+}, {
+"beat": 81.0,
+"cue": "catch"
+}, {
+"beat": 85.5,
+"cue": "catch"
+}, {
+"beat": 89.0,
+"cue": "catch"
+}, {
+"beat": 94.0,
+"cue": "catch"
+}, {
+"beat": 95.0,
+"cue": "catch"
+}, {
+"beat": 97.5,
+"cue": "catch"
+}, {
+"beat": 101.0,
+"cue": "catch"
+}, {
+"beat": 106.0,
+"cue": "catch"
+}, {
+"beat": 110.5,
+"cue": "catch"
+}, {
+"beat": 111.5,
+"cue": "catch"
+}, {
+"beat": 114.0,
+"cue": "catch"
+}, {
+"beat": 117.5,
+"cue": "catch"
+}, {
+"beat": 121.0,
+"cue": "catch"
+}, {
+"beat": 126.0,
+"cue": "catch"
+}, {
+"beat": 126.5,
+"cue": "catch"
+}, {
+"beat": 129.0,
+"cue": "catch"
+}, {
+"beat": 133.5,
+"cue": "catch"
+}, {
+"beat": 138.0,
+"cue": "catch"
+}, {
+"beat": 142.5,
+"cue": "catch"
+}, {
+"beat": 143.5,
+"cue": "catch"
+}, {
+"beat": 146.0,
+"cue": "catch"
+}, {
+"beat": 149.0,
+"cue": "catch"
+}]
+pattern_phrase_beats = [0.0]
+pattern_phrase_length = 4.0
+pattern_phrase_count = 34

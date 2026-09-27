@@ -1,0 +1,43 @@
+[gd_scene format=3 uid="uid://b32wuxdw5bsg0"]
+
+[ext_resource type="Script" uid="uid://d26rmrxwqc1aj" path="res://scripts/rhythm.gd" id="1_root"]
+[ext_resource type="AudioStream" uid="uid://nqg5t6crayos" path="res://audio/music/Rhythm_Game.wav" id="2_song"]
+[ext_resource type="Resource" path="res://beatmaps/rhythm_monkey.tres" id="3_map"]
+[ext_resource type="Script" uid="uid://bcmttdw83i7hf" path="res://scripts/coconut_game.gd" id="4_game"]
+[ext_resource type="Script" uid="uid://djtr310j6bdpt" path="res://scripts/chart_recorder.gd" id="5_rec"]
+[ext_resource type="Script" uid="uid://cal5tkismra46" path="res://scripts/rhythm_debug.gd" id="6_dbg"]
+
+[node name="world" type="Node2D" unique_id=1985141146]
+script = ExtResource("1_root")
+beatmap = ExtResource("3_map")
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="." unique_id=1864150060]
+stream = ExtResource("2_song")
+
+[node name="CoconutGame" type="Node2D" parent="." unique_id=682482336]
+script = ExtResource("4_game")
+palm_pos = Vector2(320, 655)
+leaf_spawn = Vector2(340, 50)
+monkey_pos = Vector2(640, 720)
+hands_offset = Vector2(0, -350)
+deflect_offset = Vector2(80, 200)
+fruit_px = 230.0
+palm_scale = 1.7
+monkey_scale = 1.45
+twist_pos = Vector2(180, 678)
+twist_scale = 0.9
+
+[node name="ChartRecorder" type="Node2D" parent="." unique_id=1878385701]
+script = ExtResource("5_rec")
+
+[node name="DebugLayer" type="CanvasLayer" parent="." unique_id=967740752]
+visible = false
+
+[node name="RhythmDebug" type="Control" parent="DebugLayer" unique_id=1785791439]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("6_dbg")

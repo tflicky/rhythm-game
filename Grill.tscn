@@ -1,0 +1,179 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/grill_game.gd" id="1_root"]
+[ext_resource type="AudioStream" path="res://audio/music/Rhythm_Game.wav" id="2_song"]
+[ext_resource type="Texture2D" path="res://art/grilling/grill.png" id="3_grill"]
+[ext_resource type="Texture2D" path="res://art/grilling/tap/tap_0.png" id="tap_0"]
+[ext_resource type="Texture2D" path="res://art/grilling/tap/tap_1.png" id="tap_1"]
+[ext_resource type="Texture2D" path="res://art/grilling/tap/tap_2.png" id="tap_2"]
+[ext_resource type="Texture2D" path="res://art/grilling/tap/tap_3.png" id="tap_3"]
+[ext_resource type="Texture2D" path="res://art/grilling/tap/tap_4.png" id="tap_4"]
+[ext_resource type="Texture2D" path="res://art/grilling/tap/tap_5.png" id="tap_5"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_00.png" id="flip_00"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_01.png" id="flip_01"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_02.png" id="flip_02"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_03.png" id="flip_03"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_04.png" id="flip_04"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_05.png" id="flip_05"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_06.png" id="flip_06"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_07.png" id="flip_07"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_08.png" id="flip_08"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_09.png" id="flip_09"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_10.png" id="flip_10"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_11.png" id="flip_11"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_12.png" id="flip_12"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_13.png" id="flip_13"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_14.png" id="flip_14"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_15.png" id="flip_15"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_16.png" id="flip_16"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_17.png" id="flip_17"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_18.png" id="flip_18"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_19.png" id="flip_19"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_20.png" id="flip_20"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_21.png" id="flip_21"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_22.png" id="flip_22"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_23.png" id="flip_23"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_24.png" id="flip_24"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_25.png" id="flip_25"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_26.png" id="flip_26"]
+[ext_resource type="Texture2D" path="res://art/grilling/flip/flip_27.png" id="flip_27"]
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_grill"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("flip_00")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_01")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_02")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_03")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_04")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_05")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_06")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_07")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_08")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_09")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_10")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_11")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_12")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_13")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_14")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_15")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_16")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_17")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_18")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_19")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_20")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_21")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_22")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_23")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_24")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_25")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_26")
+}, {
+"duration": 1.0,
+"texture": ExtResource("flip_27")
+}],
+"loop": false,
+"name": &"flip",
+"speed": 24.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("tap_0")
+}, {
+"duration": 1.0,
+"texture": ExtResource("tap_1")
+}, {
+"duration": 1.0,
+"texture": ExtResource("tap_2")
+}, {
+"duration": 1.0,
+"texture": ExtResource("tap_3")
+}, {
+"duration": 1.0,
+"texture": ExtResource("tap_4")
+}, {
+"duration": 1.0,
+"texture": ExtResource("tap_5")
+}],
+"loop": false,
+"name": &"tap",
+"speed": 12.0
+}]
+
+[node name="Grill" type="Node2D"]
+script = ExtResource("1_root")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 1152.0
+offset_bottom = 648.0
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2_song")
+
+[node name="Stage" type="Node2D" parent="."]
+position = Vector2(245, 20)
+scale = Vector2(0.72, 0.72)
+
+[node name="GrillArt" type="Sprite2D" parent="Stage"]
+texture = ExtResource("3_grill")
+centered = false
+
+[node name="Tongs" type="AnimatedSprite2D" parent="Stage"]
+sprite_frames = SubResource("SpriteFrames_grill")
+animation = &"flip"
+centered = false

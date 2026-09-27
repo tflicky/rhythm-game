@@ -1,0 +1,11 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Krita / editor backup files (the .kra sources themselves are kept)
+*.kra~
+*-autosave.kra
+*.png~
+
+# Exported builds
+/build/
