@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_bm")
 song_title = "Rhythm Game"
-input_offset = 0.131
+input_offset = 0.0
 cues = [{
 "beat": 17.0,
 "cue": "catch"

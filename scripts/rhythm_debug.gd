@@ -80,6 +80,10 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Calibration keys only while developing -- in an exported game a stray arrow
+	# or bracket press would silently shift the timing.
+	if not OS.is_debug_build():
+		return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	match event.keycode:
