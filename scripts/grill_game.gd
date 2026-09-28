@@ -32,6 +32,14 @@ const FLIP_LAND := 19
 const FLIP_END := 27
 const FLIP_REACH := 0.5            ## beats the example tongs start reaching before beat 1
 const FLIP_RETURN := 0.5           ## beats to go back to rest after the landing
+## Centre x (texture px) of the patty in each frame. The example tongs are drawn
+## mirrored; their patty is drawn by a separate, un-mirrored sprite placed at the
+## mirrored spot, so both patties look the same.
+const PATTY_CX := {
+	"flip": [506, 506, 506, 506, 506, 506, 506, 506, 506, 431, 431, 424, 411, 414,
+		426, 394, 403, 418, 460, 506, 506, 506, 506, 506, 506, 506, 506, 506],
+	"tap": [506, 506, 506, 506, 506, 506],
+}
 
 @export var beatmap: Beatmap
 
@@ -41,6 +49,7 @@ const FLIP_RETURN := 0.5           ## beats to go back to rest after the landing
 @export var bun_pos := Vector2(320, 520)            ## your bun (the pop lands here)
 @export var example_bun_pos := Vector2(1020, 520)   ## the example tongs' bun
 @export var you_pos := Vector2(318, 250)            ## tip of the practice "YOU" arrow
+@export var listen_pos := Vector2(1022, 250)       ## tip of the practice "LISTEN" arrow over the example tongs
 
 @export_group("Practice round")
 @export var practice: bool = true
@@ -52,6 +61,7 @@ const FLIP_RETURN := 0.5           ## beats to go back to rest after the landing
 @onready var audio: AudioStreamPlayer = $AudioStreamPlayer
 @onready var tongs: AnimatedSprite2D = $Stage/Tongs
 @onready var example: AnimatedSprite2D = $Stage/ExampleTongs
+@onready var example_patty: AnimatedSprite2D = $Stage/ExamplePatty
 
 var _phase := Phase.SONG
 var _practice_passed := false
@@ -62,6 +72,7 @@ var _calls: Array = []             ## { beat, time, cue, part, sounded, shown } 
 var _answers: Array = []           ## { beat, time, cue, part, bar } -- still to grade, in order
 var _bars := {}                    ## bar id -> { left: int, missed: bool } (practice success)
 var _next_cycle := 4.0             ## practice: beat the next call bar starts
+var _cycle_start := -100.0        ## practice: beat the latest call bar starts (answer bar follows)
 var _step := 0                     ## practice: 0 = tong claps, 1 = flip
 var _step_ok := 0                  ## practice: clean answer bars in this step
 var banner := ""
@@ -152,6 +163,7 @@ func _start_practice() -> void:
 	_step_ok = 0
 	_reset_round()
 	_next_cycle = 4.0            # one bar of clicks first
+	_cycle_start = -100.0
 	if _metronome == null:
 		_metronome = ClickTrack.make(Conductor.bpm, 64, Conductor.beats_per_measure, Conductor.first_beat_offset)
 	audio.stream = _metronome
@@ -188,6 +200,7 @@ func _on_song_finished() -> void:
 		_answers.clear()
 		_bars.clear()
 		_next_cycle = 4.0
+		_cycle_start = -100.0
 		Conductor.play()
 	elif _phase == Phase.SONG:
 		_finished = true
@@ -210,6 +223,7 @@ func _schedule_practice() -> void:
 		_answers.append({"beat": ab, "time": Conductor.time_of_beat(ab), "cue": cue,
 			"part": _part(cue, ab), "bar": bar + 1})
 	_bars[bar + 1] = {"left": (PATTERN[cue] as Array).size(), "missed": false}
+	_cycle_start = _next_cycle
 	_next_cycle += 8.0
 
 
@@ -266,6 +280,7 @@ func _process(_dt: float) -> void:
 			_act(example, c["cue"], c["part"], c["beat"], true)
 	_calls = _calls.filter(func(c): return not (c["sounded"] and c["shown"]))
 	_drive_flips(vis)
+	_sync_example_patty()
 
 	# an answer nobody pressed for -> Miss
 	while not _answers.is_empty() and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
@@ -303,10 +318,10 @@ func _press() -> void:
 			_answers.pop_front()
 			_grade(c, "Perfect" if absf(err) <= PERFECT else "Good")
 			return
+	# nothing to answer -- just clack the tongs (the sound always plays, even when spamming)
 	if not _flips.has(tongs):
-		_play(tongs, &"tap")   # nothing to answer -- just clack the tongs (unless mid-flip)
-	if _phase != Phase.SONG:
-		_sound("tap", 0)
+		_play(tongs, &"tap")
+	_sound("tap", 0)
 
 
 func _grade(c: Dictionary, grade: String) -> void:
@@ -356,6 +371,21 @@ func _play(who: AnimatedSprite2D, anim: StringName) -> void:
 	_flips.erase(who)
 	who.stop()
 	who.play(anim)
+
+
+## Show the example's patty on the same frame as the example tongs, un-mirrored,
+## at the spot the mirrored drawing would put it.
+func _sync_example_patty() -> void:
+	var anim := example.animation
+	var fr := example.frame
+	if example_patty.animation != anim:
+		example_patty.animation = anim
+	example_patty.stop()
+	example_patty.frame = fr
+	var w := float(example.sprite_frames.get_frame_texture(anim, fr).get_width())
+	var table: Array = PATTY_CX.get(String(anim), [])
+	var cx: float = table[fr] if fr < table.size() else w * 0.5
+	example_patty.position = Vector2(example.position.x + w - 2.0 * cx, example.position.y)
 
 
 ## Set each flipping tongs' frame from the music clock (see FLIP_GRAB etc.).
@@ -431,11 +461,16 @@ func _draw_fx() -> void:
 
 
 func _draw_practice(l: Node2D, font: Font) -> void:
-	# "YOU" over your tongs
-	var tip := you_pos
-	l.draw_string_outline(font, Vector2(tip.x - 100, tip.y - 40), "YOU", HORIZONTAL_ALIGNMENT_CENTER, 200, 44, 8, Color(0.15, 0.1, 0.08))
-	l.draw_string(font, Vector2(tip.x - 100, tip.y - 40), "YOU", HORIZONTAL_ALIGNMENT_CENTER, 200, 44, Color(1, 0.95, 0.45))
-	l.draw_colored_polygon(PackedVector2Array([tip + Vector2(-13, -30), tip + Vector2(13, -30), tip]), Color(1, 0.95, 0.45))
+	# Whose turn it is: LISTEN over the blue tongs during their bar, YOUR TURN!
+	# over yours during the answer bar (YOU, dimmed, the rest of the time).
+	var b := Conductor.visual_position / Conductor.seconds_per_beat
+	var listening := _phase == Phase.PRACTICE and b >= _cycle_start and b < _cycle_start + 4.0
+	var answering := _phase == Phase.PRACTICE and b >= _cycle_start + 4.0 and b < _cycle_start + 8.0
+	var yellow := Color(1, 0.95, 0.45)
+	if listening:
+		_label(l, font, listen_pos, "LISTEN", Color(0.45, 0.72, 1.0))
+	_label(l, font, you_pos, "YOUR TURN!" if answering else "YOU",
+		yellow if not listening else Color(yellow, 0.35))
 
 	var box := Rect2(VP.x - 400, VP.y - 216, 376, 196)   # bottom-right: clear of the grill and both tongs
 	var x := box.position.x
@@ -443,7 +478,7 @@ func _draw_practice(l: Node2D, font: Font) -> void:
 	var w := box.size.x
 	l.draw_style_box(_panel_sb, box)
 	l.draw_string(font, Vector2(x, y + 46), "PRACTICE", HORIZONTAL_ALIGNMENT_CENTER, w, 32, INK)
-	l.draw_string(font, Vector2(x, y + 82), "Copy the blue tongs with SPACE", HORIZONTAL_ALIGNMENT_CENTER, w, 22, INK)
+	l.draw_string(font, Vector2(x, y + 82), "Listen, then copy with SPACE", HORIZONTAL_ALIGNMENT_CENTER, w, 22, INK)
 	var step_text := "Clack clack!" if _step == 0 else "Flip: 3 presses, beats 1-2-3"
 	l.draw_string(font, Vector2(x, y + 114), step_text, HORIZONTAL_ALIGNMENT_CENTER, w, 22, Color(0.25, 0.4, 0.75))
 	var gap := 44.0
@@ -455,6 +490,14 @@ func _draw_practice(l: Node2D, font: Font) -> void:
 		else:
 			l.draw_arc(c, 14.0, 0.0, TAU, 32, Color(INK, 0.45), 3.0)
 	l.draw_string(font, Vector2(x, y + 184), "S to skip", HORIZONTAL_ALIGNMENT_CENTER, w, 16, Color(INK, 0.6))
+
+
+## Outlined label with a down arrow whose tip is at `tip`.
+func _label(l: Node2D, font: Font, tip: Vector2, text: String, col: Color) -> void:
+	var at := Vector2(tip.x - 150, tip.y - 40)
+	l.draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_CENTER, 300, 44, 8, Color(0.15, 0.1, 0.08, col.a))
+	l.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_CENTER, 300, 44, col)
+	l.draw_colored_polygon(PackedVector2Array([tip + Vector2(-13, -30), tip + Vector2(13, -30), tip]), col)
 
 
 ## Placeholder bun + patty until there's art for it.

@@ -157,6 +157,12 @@ animations = [{
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_example"]
 shader = ExtResource("5_tint")
+shader_parameter/layer = 1
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_example_patty"]
+shader = ExtResource("5_tint")
+shader_parameter/use_tint = false
+shader_parameter/layer = 2
 
 [node name="Grill" type="Node2D"]
 script = ExtResource("1_root")
@@ -180,6 +186,13 @@ texture = ExtResource("3_grill")
 centered = false
 
 [node name="Tongs" type="AnimatedSprite2D" parent="Stage"]
+sprite_frames = SubResource("SpriteFrames_grill")
+animation = &"flip"
+centered = false
+
+[node name="ExamplePatty" type="AnimatedSprite2D" parent="Stage"]
+material = SubResource("ShaderMaterial_example_patty")
+position = Vector2(260, -21)
 sprite_frames = SubResource("SpriteFrames_grill")
 animation = &"flip"
 centered = false
