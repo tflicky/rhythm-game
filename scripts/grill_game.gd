@@ -32,11 +32,13 @@ const FLIP_LAND := 19
 const FLIP_END := 27
 const FLIP_REACH := 0.5            ## beats the example tongs start reaching before beat 1
 const FLIP_RETURN := 0.5           ## beats to go back to rest after the landing
-## Centre x (texture px) of the patty in each frame. The example tongs are drawn
-## mirrored; their patty is drawn by a separate, un-mirrored sprite placed at the
-## mirrored spot, so both patties look the same.
+## The example is drawn from separately exported layers (art/grilling/parts/):
+## back tong, patty, front tongs -- the tongs mirrored and tinted, the patty
+## un-mirrored but placed where the mirrored drawing would put it, so both
+## patties look the same. PATTY_CX = centre x (texture px) of the patty per frame.
+const PARTS_DIR := "res://art/grilling/parts/"
 const PATTY_CX := {
-	"flip": [506, 506, 506, 506, 506, 506, 506, 506, 506, 431, 431, 424, 411, 414,
+	"flip": [506, 506, 506, 506, 506, 506, 506, 506, 506, 431, 431, 424, 412, 414,
 		426, 394, 403, 418, 460, 506, 506, 506, 506, 506, 506, 506, 506, 506],
 	"tap": [506, 506, 506, 506, 506, 506],
 }
@@ -61,7 +63,11 @@ const PATTY_CX := {
 @onready var audio: AudioStreamPlayer = $AudioStreamPlayer
 @onready var tongs: AnimatedSprite2D = $Stage/Tongs
 @onready var example: AnimatedSprite2D = $Stage/ExampleTongs
-@onready var example_patty: AnimatedSprite2D = $Stage/ExamplePatty
+## Visible layers of the example (ExampleTongs itself is hidden and only keeps time).
+var _ex_back: Sprite2D
+var _ex_patty: Sprite2D
+var _ex_front: Sprite2D
+var _ex_tex := {}                  ## part name -> Array[Texture2D]
 
 var _phase := Phase.SONG
 var _practice_passed := false
@@ -110,6 +116,7 @@ func _ready() -> void:
 	_panel_sb.set_corner_radius_all(18)
 	_panel_sb.set_border_width_all(4)
 	_panel_sb.border_color = INK
+	_build_example()
 
 	_song_stream = audio.stream
 	Conductor.stream_player = audio
@@ -199,6 +206,8 @@ func _on_song_finished() -> void:
 		_calls.clear()
 		_answers.clear()
 		_bars.clear()
+		_fx.clear()        # the clock goes back to 0 -- old effects would get negative ages
+		_flips.clear()
 		_next_cycle = 4.0
 		_cycle_start = -100.0
 		Conductor.play()
@@ -280,13 +289,13 @@ func _process(_dt: float) -> void:
 			_act(example, c["cue"], c["part"], c["beat"], true)
 	_calls = _calls.filter(func(c): return not (c["sounded"] and c["shown"]))
 	_drive_flips(vis)
-	_sync_example_patty()
+	_sync_example()
 
 	# an answer nobody pressed for -> Miss
 	while not _answers.is_empty() and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
 		var a: Dictionary = _answers.pop_front()
 		_grade(a, "Miss")
-	_fx = _fx.filter(func(f): return now - f["t0"] < 1.2)
+	_fx = _fx.filter(func(f): return now - f["t0"] >= -0.05 and now - f["t0"] < 1.2)
 	_fx_layer.queue_redraw()
 
 
@@ -375,17 +384,51 @@ func _play(who: AnimatedSprite2D, anim: StringName) -> void:
 
 ## Show the example's patty on the same frame as the example tongs, un-mirrored,
 ## at the spot the mirrored drawing would put it.
-func _sync_example_patty() -> void:
-	var anim := example.animation
+func _sync_example() -> void:
+	var flip := example.animation == &"flip"
 	var fr := example.frame
-	if example_patty.animation != anim:
-		example_patty.animation = anim
-	example_patty.stop()
-	example_patty.frame = fr
-	var w := float(example.sprite_frames.get_frame_texture(anim, fr).get_width())
-	var table: Array = PATTY_CX.get(String(anim), [])
-	var cx: float = table[fr] if fr < table.size() else w * 0.5
-	example_patty.position = Vector2(example.position.x + w - 2.0 * cx, example.position.y)
+	var back: Array = _ex_tex["flip_back"]
+	var front: Array = _ex_tex["flip_front"] if flip else _ex_tex["tap_tongs"]
+	var patty: Array = _ex_tex["flip_patty"]
+	_ex_back.visible = flip                       # the back tong is only drawn separately in the flip
+	_ex_back.texture = back[mini(fr, back.size() - 1)]
+	_ex_front.texture = front[mini(fr, front.size() - 1)]
+	var pf := fr if flip else 0                   # the patty rests during a tap
+	_ex_patty.texture = patty[mini(pf, patty.size() - 1)]
+	var w := float(_ex_patty.texture.get_width())
+	var table: Array = PATTY_CX["flip"]
+	var cx: float = table[mini(pf, table.size() - 1)]
+	_ex_patty.position = Vector2(example.position.x + w - 2.0 * cx, example.position.y)
+
+
+## Build the example's three visible layers (back tong, patty, front tongs),
+## drawn in that order just above the hidden timing sprite.
+func _build_example() -> void:
+	for part in ["flip_back", "flip_patty", "flip_front", "tap_tongs"]:
+		var frames: Array = []
+		var i := 0
+		while ResourceLoader.exists("%s%s/%s_%02d.png" % [PARTS_DIR, part, part, i]):
+			frames.append(load("%s%s/%s_%02d.png" % [PARTS_DIR, part, part, i]))
+			i += 1
+		_ex_tex[part] = frames
+	var tint: Material = example.material     # blue tint on the grey tongs only
+	var at := example.get_index() + 1
+	for n in ["ExampleBack", "ExamplePattyLayer", "ExampleFront"]:
+		var s := Sprite2D.new()
+		s.name = n
+		s.centered = false
+		s.position = example.position
+		if n != "ExamplePattyLayer":
+			s.flip_h = true
+			s.material = tint
+		example.get_parent().add_child(s)
+		example.get_parent().move_child(s, at)
+		at += 1
+		match n:
+			"ExampleBack": _ex_back = s
+			"ExamplePattyLayer": _ex_patty = s
+			"ExampleFront": _ex_front = s
+	_sync_example()
 
 
 ## Set each flipping tongs' frame from the music clock (see FLIP_GRAB etc.).
@@ -433,7 +476,7 @@ func _draw_fx() -> void:
 	if _example_landed:
 		_draw_burger(l, example_bun_pos)
 	for f in _fx:
-		var t: float = now - f["t0"]
+		var t: float = maxf(now - f["t0"], 0.0)
 		var pos: Vector2 = f["pos"]
 		match f["kind"]:
 			"steam":   # three puffs drifting up off the patty
