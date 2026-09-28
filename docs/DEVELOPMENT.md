@@ -18,7 +18,8 @@ accumulation. That's the only way sync stays exact over a whole song.
 | `scripts/calibrate.gd` | Timing calibration screen (`Calibrate.tscn`). Shown on first launch and from the menu. |
 | `scripts/settings.gd` | `Settings`: per-computer values saved in `user://settings.cfg` (currently just the calibrated `input_offset`). |
 | `scripts/main_menu.gd` | Level select (`MainMenu.tscn`, the main scene). Adding a level is one entry in `LEVELS`. |
-| `scripts/grill_game.gd` | **Grill Master** test bed: tongs tap / flip animations over the song. |
+| `scripts/grill_game.gd` | **Grill Master.** Call and response over `Grill_Song.wav` (130 BPM): the song plays an example bar, the player answers the next bar with Space. Tong claps → `tap` animation; 3-part flip bars (beats 1-2-3) → `flip` on beat 1, steam on 2 and 3; the pop bar lands the patty on a bun (placeholder drawing). |
+| `beatmaps/grill.tres` | The Grill Master chart: 74 cues, each `role: "call"` (example, not graded) or `"answer"` (37 presses). Generated from the song's Tongs / Sizzle / Pop stems. |
 | `scripts/chart_recorder.gd` | Record mode: tap a chart in by ear (see below). |
 | `scripts/rhythm_debug.gd` | Hidden calibration overlay for development. Its keys only work when running from the editor, never in an exported game. |
 | `art/`, `audio/sfx/` | Art and sound slots, see [art/README.md](../art/README.md) and [audio/sfx/README.md](../audio/sfx/README.md). |
