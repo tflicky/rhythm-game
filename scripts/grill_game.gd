@@ -21,7 +21,17 @@ const INK := Color(0.2, 0.14, 0.12)
 ## Beats within a bar for each move (flip / pop: beats 1-2-3).
 const PATTERN := {"tap": [2.5, 3.0], "flip": [0.0, 1.0, 2.0], "pop": [0.0, 1.0, 2.0]}
 const SFX := {"tong": "res://audio/sfx/grill/tong.wav", "flip": "res://audio/sfx/grill/flip.wav",
-	"sizzle": "res://audio/sfx/grill/sizzle.wav", "pop": "res://audio/sfx/grill/pop.wav"}
+	"scrape": "res://audio/sfx/grill/scrape.wav", "sizzle": "res://audio/sfx/grill/sizzle.wav",
+	"pop": "res://audio/sfx/grill/pop.wav"}
+## The flip animation is driven by the music clock, pinned to the bar: grab on
+## beat 1 (the hit), top of the toss on beat 2 (the scrape), landing on beat 3
+## (the sizzle), then back to rest. Values are frames of the "flip" animation.
+const FLIP_GRAB := 7
+const FLIP_TOP := 12
+const FLIP_LAND := 19
+const FLIP_END := 27
+const FLIP_REACH := 0.5            ## beats the example tongs start reaching before beat 1
+const FLIP_RETURN := 0.5           ## beats to go back to rest after the landing
 
 @export var beatmap: Beatmap
 
@@ -65,6 +75,7 @@ var _landed := false               ## your patty is on your bun
 var _example_landed := false
 var _finished := false
 
+var _flips := {}                   ## AnimatedSprite2D -> song time of beat 1 of the flip it's doing
 var _fx_layer: Node2D
 var _sfx: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
@@ -128,6 +139,7 @@ func _reset_round() -> void:
 	combo = 0
 	best_combo = 0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
+	_flips.clear()
 	for t in [tongs, example]:
 		t.play(&"flip")
 		t.stop()
@@ -240,14 +252,20 @@ func _process(_dt: float) -> void:
 	_schedule_practice()
 
 	for c in _calls:
+		# the example tongs start reaching for the patty just before a flip's beat 1
+		if c["cue"] != "tap" and c["part"] == 0 and not c.get("reached", false) \
+				and vis >= c["time"] - FLIP_REACH * Conductor.seconds_per_beat:
+			c["reached"] = true
+			_flips[example] = c["time"]
 		# practice: the example's sound, fired output-latency early so it's heard on the beat
 		if not c["sounded"] and now >= c["time"] - latency:
 			c["sounded"] = true
 			_sound(c["cue"], c["part"])
 		if not c["shown"] and vis >= c["time"]:
 			c["shown"] = true
-			_act(example, c["cue"], c["part"], true)
+			_act(example, c["cue"], c["part"], c["beat"], true)
 	_calls = _calls.filter(func(c): return not (c["sounded"] and c["shown"]))
+	_drive_flips(vis)
 
 	# an answer nobody pressed for -> Miss
 	while not _answers.is_empty() and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
@@ -285,7 +303,8 @@ func _press() -> void:
 			_answers.pop_front()
 			_grade(c, "Perfect" if absf(err) <= PERFECT else "Good")
 			return
-	_play(tongs, &"tap")   # nothing to answer -- just clack the tongs
+	if not _flips.has(tongs):
+		_play(tongs, &"tap")   # nothing to answer -- just clack the tongs (unless mid-flip)
 	if _phase != Phase.SONG:
 		_sound("tap", 0)
 
@@ -295,7 +314,7 @@ func _grade(c: Dictionary, grade: String) -> void:
 	if _phase != Phase.SONG:
 		if grade != "Miss":
 			_sound(c["cue"], c["part"])   # practice has no song to play the answer
-			_act(tongs, c["cue"], c["part"], false)
+			_act(tongs, c["cue"], c["part"], c["beat"], false)
 		else:
 			_fx.append({"kind": "miss", "t0": Conductor.song_position, "pos": patty_pos})
 		return
@@ -307,37 +326,64 @@ func _grade(c: Dictionary, grade: String) -> void:
 	combo += 1
 	best_combo = maxi(best_combo, combo)
 	score += 100 if grade == "Perfect" else 50
-	_act(tongs, c["cue"], c["part"], false)
+	_act(tongs, c["cue"], c["part"], c["beat"], false)
 
 
 ## Animate one press of a move on a set of tongs.
-func _act(who: AnimatedSprite2D, cue: String, part: int, is_example: bool) -> void:
+func _act(who: AnimatedSprite2D, cue: String, part: int, beat: float, is_example: bool) -> void:
 	var t := Conductor.song_position
 	match cue:
 		"tap":
 			_play(who, &"tap")
 		"flip", "pop":
-			if part == 0:
-				_play(who, &"flip")                     # beat 1: the flip itself
-			elif cue == "pop" and part == 2:            # beat 3 of the pop bar: onto the bun
+			# any press of the bar starts (or keeps) the flip, pinned to that bar's beat 1
+			var beat1 := Conductor.time_of_beat(beat - float(part))
+			if not is_equal_approx(_flips.get(who, -1.0), beat1):
+				_flips[who] = beat1
+			if part != 2:
+				return
+			if cue == "pop":                            # beat 3 of the pop bar: onto the bun
 				if is_example:
 					_example_landed = true
 				else:
 					_landed = true
 				_fx.append({"kind": "pop", "t0": t, "pos": example_bun_pos if is_example else bun_pos})
-			else:
+			else:                                       # beat 3: lands with a sizzle
 				_fx.append({"kind": "steam", "t0": t, "pos": example_patty_pos if is_example else patty_pos})
 
 
 func _play(who: AnimatedSprite2D, anim: StringName) -> void:
+	_flips.erase(who)
 	who.stop()
 	who.play(anim)
+
+
+## Set each flipping tongs' frame from the music clock (see FLIP_GRAB etc.).
+func _drive_flips(vis: float) -> void:
+	for who: AnimatedSprite2D in _flips.keys():
+		var b: float = (vis - _flips[who]) / Conductor.seconds_per_beat   # beats since beat 1
+		var f: float
+		if b < 0.0:
+			f = lerpf(0.0, FLIP_GRAB, clampf((b + FLIP_REACH) / FLIP_REACH, 0.0, 1.0))
+		elif b < 1.0:
+			f = lerpf(FLIP_GRAB, FLIP_TOP, b)
+		elif b < 2.0:
+			f = lerpf(FLIP_TOP, FLIP_LAND, b - 1.0)
+		elif b < 2.0 + FLIP_RETURN:
+			f = lerpf(FLIP_LAND, FLIP_END, (b - 2.0) / FLIP_RETURN)
+		else:
+			_flips.erase(who)
+			f = 0.0
+		if who.animation != &"flip":
+			who.animation = &"flip"
+		who.stop()
+		who.frame = int(f)
 
 
 func _sound(cue: String, part: int) -> void:
 	var key := "tong"
 	if cue != "tap":
-		key = "flip" if part == 0 else ("pop" if cue == "pop" and part == 2 else "sizzle")
+		key = ["flip", "scrape", "pop" if cue == "pop" else "sizzle"][clampi(part, 0, 2)]
 	if not _sfx.has(key):
 		return
 	var p := _players[_next_player]
