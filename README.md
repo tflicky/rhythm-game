@@ -17,14 +17,14 @@ A hand-drawn, Rhythm Heaven–style collection of rhythm minigames, made in Godo
 | | |
 |---|---|
 | ![Monkey Business](docs/screenshots/monkey-business.png) | **Monkey Business.** A monkey hip-bumps the palm tree and coconuts fall. Listen for the cue sound, then catch each one right on the beat. Starts with a short practice round. |
-| ![Grill Master](docs/screenshots/grill-master.png) | **Grill Master.** Call and response: the song plays a tong clack-clack, a 3-part sizzle flip or the final pop, and you answer it on the next bar in the same rhythm. *(Work in progress.)* |
+| ![Grill Master](docs/screenshots/grill-master.png) | **Grill Master.** Call and response: the song plays a tong clack-clack, a 3-part sizzle flip or the final pop, and you answer it on the next bar in the same rhythm, copying the blue example tongs. Starts with a practice round covering the claps and the flip. *(Work in progress.)* |
 
 ## Controls
 
 | Key | Action |
 |---|---|
 | **Space** / left click | Catch a coconut / answer on the grill |
-| **S** | Skip the practice round (Monkey Business) |
+| **S** | Skip the practice round |
 | **R** | Restart the level |
 | **Esc** | Back to the menu |
 | **Up / Down**, **Enter** | Pick a level on the menu |

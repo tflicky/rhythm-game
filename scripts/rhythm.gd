@@ -97,7 +97,7 @@ func _start_practice() -> void:
 	game.practice_caught = 0
 	game.banner = ""
 	if _metronome == null:
-		_metronome = _make_metronome()
+		_metronome = ClickTrack.make(Conductor.bpm, practice_metronome_beats, Conductor.beats_per_measure, Conductor.first_beat_offset)
 	audio.stream = _metronome
 	audio.volume_db = practice_metronome_db
 	Conductor.play()
@@ -172,28 +172,3 @@ func _unhandled_input(e: InputEvent) -> void:
 			_apply_mode()
 			_restart()
 			print("[rhythm] mode -> ", "RECORD" if mode == Mode.RECORD else "PLAY")
-
-
-## Practice click track at the song's BPM: a high tick on each bar's downbeat,
-## a lower one on the other beats. Not looped -- song_finished restarts it, so
-## the Conductor clock never jumps backwards.
-func _make_metronome() -> AudioStreamWAV:
-	var rate := 44100
-	var spb: float = Conductor.seconds_per_beat
-	var n := int(rate * (spb * practice_metronome_beats + 0.5))
-	var data := PackedByteArray()
-	data.resize(n * 2)   # zero-filled = silence
-	var click_n := int(rate * 0.04)
-	for b in practice_metronome_beats:
-		var freq := 1600.0 if b % Conductor.beats_per_measure == 0 else 1000.0
-		var start := int(rate * (Conductor.first_beat_offset + b * spb))
-		for i in click_n:
-			var t := float(i) / rate
-			var env := pow(1.0 - float(i) / click_n, 3.0)
-			data.encode_s16((start + i) * 2, int(sin(TAU * freq * t) * env * 0.6 * 32767.0))
-	var w := AudioStreamWAV.new()
-	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = rate
-	w.stereo = false
-	w.data = data
-	return w

@@ -32,7 +32,7 @@ func _ready() -> void:
 	Conductor.bpm = map.bpm if map else 128.0
 	Conductor.first_beat_offset = 0.0
 	_audio = AudioStreamPlayer.new()
-	_audio.stream = _make_click_track()
+	_audio.stream = ClickTrack.make(Conductor.bpm, BEATS, Conductor.beats_per_measure)
 	add_child(_audio)
 	Conductor.stream_player = _audio
 	Conductor.song_finished.connect(_on_track_finished)
@@ -237,27 +237,3 @@ func _box(fill: Color, border := Color.TRANSPARENT) -> StyleBoxFlat:
 	s.set_border_width_all(4 if border.a > 0.0 else 0)
 	s.border_color = border
 	return s
-
-
-## Click on every beat (accented on the bar), BEATS long, not looped -- the
-## Conductor clock must never jump backwards; song_finished restarts it.
-func _make_click_track() -> AudioStreamWAV:
-	var rate := 44100
-	var spb: float = Conductor.seconds_per_beat
-	var n := int(rate * (spb * BEATS + 0.5))
-	var data := PackedByteArray()
-	data.resize(n * 2)
-	var click_n := int(rate * 0.04)
-	for b in BEATS:
-		var freq := 1600.0 if b % Conductor.beats_per_measure == 0 else 1000.0
-		var start := int(rate * b * spb)
-		for i in click_n:
-			var t := float(i) / rate
-			var env := pow(1.0 - float(i) / click_n, 3.0)
-			data.encode_s16((start + i) * 2, int(sin(TAU * freq * t) * env * 0.6 * 32767.0))
-	var w := AudioStreamWAV.new()
-	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = rate
-	w.stereo = false
-	w.data = data
-	return w

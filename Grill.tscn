@@ -4,6 +4,7 @@
 [ext_resource type="AudioStream" path="res://audio/music/Grill_Song.wav" id="2_song"]
 [ext_resource type="Resource" path="res://beatmaps/grill.tres" id="4_map"]
 [ext_resource type="Texture2D" path="res://art/grilling/grill.png" id="3_grill"]
+[ext_resource type="Shader" path="res://shaders/tint_grey.gdshader" id="5_tint"]
 [ext_resource type="Texture2D" path="res://art/grilling/tap/tap_0.png" id="tap_0"]
 [ext_resource type="Texture2D" path="res://art/grilling/tap/tap_1.png" id="tap_1"]
 [ext_resource type="Texture2D" path="res://art/grilling/tap/tap_2.png" id="tap_2"]
@@ -154,6 +155,9 @@ animations = [{
 "speed": 12.0
 }]
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_example"]
+shader = ExtResource("5_tint")
+
 [node name="Grill" type="Node2D"]
 script = ExtResource("1_root")
 beatmap = ExtResource("4_map")
@@ -179,3 +183,11 @@ centered = false
 sprite_frames = SubResource("SpriteFrames_grill")
 animation = &"flip"
 centered = false
+
+[node name="ExampleTongs" type="AnimatedSprite2D" parent="Stage"]
+material = SubResource("ShaderMaterial_example")
+position = Vector2(260, -21)
+sprite_frames = SubResource("SpriteFrames_grill")
+animation = &"flip"
+centered = false
+flip_h = true
