@@ -24,9 +24,14 @@ const LEVELS := [
 			# built by tools/make_wizard_icon.ps1 from the exported Krita frames
 			{"tex": "res://art/wizard/icon.png", "pos": Vector2(0, 0), "size": Vector2(110, 110)},
 		]},
+	{"title": "Boomerang", "scene": "res://Boomerang.tscn",
+		"color": Color(0.8, 0.36, 0.3)},
 ]
 
 const ICON_SIZE := Vector2(110, 110)
+## Icons are laid out in the 110x110 ICON_SIZE box above, then shown at this scale
+## (shrunk so 4+ levels fit on the 648 px screen).
+const ICON_SCALE := 0.78
 const BG :=Color(0.99, 0.93, 0.8)
 const INK := Color(0.2, 0.14, 0.12)
 
@@ -50,13 +55,13 @@ func _ready() -> void:
 	col.set_anchors_preset(Control.PRESET_CENTER)
 	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	col.grow_vertical = Control.GROW_DIRECTION_BOTH
-	col.add_theme_constant_override("separation", 18)
+	col.add_theme_constant_override("separation", 10)
 	add_child(col)
 
 	var title := Label.new()
 	title.text = "RHYTHM GAME"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 64)
+	title.add_theme_font_size_override("font_size", 52)
 	title.add_theme_color_override("font_color", INK)
 	col.add_child(title)
 
@@ -68,7 +73,7 @@ func _ready() -> void:
 	col.add_child(sub)
 
 	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 12)
+	gap.custom_minimum_size = Vector2(0, 0)
 	col.add_child(gap)
 
 	for lvl in LEVELS:
@@ -91,7 +96,7 @@ func _ready() -> void:
 	var cal_row := HBoxContainer.new()
 	cal_row.add_theme_constant_override("separation", 16)
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(ICON_SIZE.x, 0)
+	spacer.custom_minimum_size = Vector2(ICON_SIZE.x * ICON_SCALE, 0)
 	cal_row.add_child(spacer)
 	cal_row.add_child(cal)
 	col.add_child(cal_row)
@@ -112,8 +117,12 @@ func _ready() -> void:
 
 func _make_icon(layers: Array) -> Control:
 	var box := Control.new()
-	box.custom_minimum_size = ICON_SIZE
+	box.custom_minimum_size = ICON_SIZE * ICON_SCALE
 	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var inner := Control.new()        # layers are placed in ICON_SIZE space, then scaled down
+	inner.scale = Vector2.ONE * ICON_SCALE
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(inner)
 	for layer in layers:
 		if not ResourceLoader.exists(layer["tex"]):
 			continue
@@ -126,7 +135,7 @@ func _make_icon(layers: Array) -> Control:
 		t.pivot_offset = t.size / 2.0
 		t.rotation_degrees = layer.get("rot", 0.0)
 		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		box.add_child(t)
+		inner.add_child(t)
 	return box
 
 
@@ -135,7 +144,7 @@ func _make_button(lvl: Dictionary) -> Button:
 	var b := Button.new()
 	var blurb: String = lvl.get("blurb", "") if built else "coming soon"
 	b.text = lvl["title"] if blurb.is_empty() else "%s\n%s" % [lvl["title"], blurb]
-	b.custom_minimum_size = Vector2(460, 92)
+	b.custom_minimum_size = Vector2(460, 80)
 	b.disabled = not built
 	b.focus_mode = Control.FOCUS_ALL
 	b.add_theme_font_size_override("font_size", 26)

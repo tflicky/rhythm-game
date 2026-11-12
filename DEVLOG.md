@@ -89,7 +89,7 @@ afternoon of commits, on a new 130 BPM `Grill_Song.wav`:
   the clock went back to 0, effects got negative ages, and a huge
   inside-out circle was drawn. Effects are now cleared on loop.
 
-## Grill Master, take 2: cues, burgers and a tutorial (Nov 9–11, uncommitted)
+## Grill Master, take 2: cues, burgers and a tutorial (Nov 9–11)
 
 The biggest rework in the project: `grill_game.gd` went from ~570 to ~1,800
 lines.
@@ -127,7 +127,7 @@ lines.
   stripped-down loop (sizzle, sizzle… pop, flip) to answer one question: is
   flipping a single burger on the beat fun by itself?
 
-## Wizard Tower prototype (Nov 9, uncommitted)
+## Wizard Tower prototype (Nov 9)
 
 A third minigame (`Wizard.tscn`, `scripts/wizard_game.gd`), added to the menu.
 An enemy tower lobs a bar of fire and ice balls into the sky. They hang in
@@ -144,6 +144,54 @@ Supporting tools were written for it:
   gnome, wand, spell and burst line up exactly as drawn.
 - `tools/make_wizard_icon.ps1` builds the menu icon from those frames.
 
+## Boomerang prototype (Nov 12)
+
+A new level (`Boomerang.tscn`, `scripts/boomerang_game.gd`, 4th on the menu),
+from the idea: throw a boomerang with Space and catch it with Space, with three
+counts to catch on: "1 2 3 4 catch", "1 & 2 & 3 & catch" and "1 2 3 catch".
+
+What it is now:
+
+- **Cue, cue, THROW.** On the two beats before each throw, the thrower makes a
+  cue noise. Each boomerang colour has its own noise (red "hah" = 1 2 3, green
+  "hee" = 1 & 2 & 3 &, blue "hoo" = 1 2 3 4), so you know the count by ear
+  before you throw. The count then plays while it flies, and you catch right
+  after it.
+- **Timing:** one throw every 2 bars, always on a downbeat. Red and green
+  catch 4 beats later, blue 5. The colours mix after the first two, and the
+  count board at the top only shows the first time you meet each colour.
+- **Balloons:** a clean throw sends balloons into the boomerang's path, and it
+  pops them on a count (pop on the beat, +20). A fumbled throw gets none.
+- **Misses:** a missed throw fumbles it out anyway. A missed catch bonks the
+  thrower on the head.
+- All art and sound are placeholders. Real sounds dropped into
+  `audio/sfx/boomerang/` (`cue_three`, `cue_and`, `cue_four`, `count_1`…, `pop`,
+  …) are used automatically, and the song is still the monkey track until the
+  custom one is made.
+
+How it got there (it took a few rounds):
+
+1. The first version was built entirely from the one-line idea. It worked,
+   but: *"I really like the boomerang game but it feels like I didnt make it."*
+   From now on, design choices get asked about rather than invented.
+2. *"There should always be a call before the players response."* First try:
+   the whole rhythm played as sound, then you repeat it. Rejected: *"the call
+   should be an audio cue I mean, the example character isnt as fun"* and
+   *"that's not the most fun"*. The model was a classic rhythm-game warm-up
+   where *"the monkey makes a noise twice then throws the ball all in beat"*.
+   That became "cue, cue, THROW", with a different noise for each colour.
+3. *"Its a little too easy"*, plus *"I like the idea of the player popping
+   balloons floating by"*. The throws were packed closer (3 beats after each
+   catch), the colours mixed early, the count board hidden, and balloons added.
+4. *"I think its a little too hard now I want it to be more like the original
+   timings we had and more on the beat"*. Back to every 2 bars on the
+   downbeat. And *"I prefer only the balloons that will be popped to be
+   present on screen"*: balloons now only appear after a clean throw.
+
+The main menu was getting too tall with four levels (the title and Calibrate
+button were cut off), so the rows got tighter and the icons smaller
+(`ICON_SCALE`).
+
 ## Other tools
 
 - `tools/tap_composer.html` – a standalone browser page for tapping drums and
@@ -159,5 +207,6 @@ Supporting tools were written for it:
   `art/monkey/monkey_twist.png~`, `art/grilling/krita animation.kra~`.
 - The README's minigame list, controls and project layout don't mention
   Wizard Tower, the One-Burger Test or the grill rework yet. The flip is also
-  now a hold rather than a press.
-- Everything from November is uncommitted.
+  now a hold rather than a press. Boomerang isn't in the README either.
+- Boomerang has no menu icon yet, and its "1 & 2 & 3 &" and "1 2 3" counts
+  catch on the same beat (only the cue noise and the hops tell them apart).

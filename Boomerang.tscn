@@ -1,0 +1,10 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/boomerang_game.gd" id="1_root"]
+[ext_resource type="AudioStream" path="res://audio/music/Rhythm_Game.wav" id="2_song"]
+
+[node name="Boomerang" type="Node2D"]
+script = ExtResource("1_root")
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2_song")
