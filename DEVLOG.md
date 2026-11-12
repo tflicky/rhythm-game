@@ -200,13 +200,14 @@ button were cut off), so the rows got tighter and the icons smaller
 
 ## Loose ends spotted
 
-- `shaders/tint_grey.gdshader` is no longer used by any scene since the example
-  tongs were removed. `audio/sfx/grill/scrape.wav` is unused too (the sound
-  README already notes this).
-- Backup and leftover files: `art/grilling/scene/table.png.bak`,
-  `art/monkey/monkey_twist.png~`, `art/grilling/krita animation.kra~`.
-- The README's minigame list, controls and project layout don't mention
-  Wizard Tower, the One-Burger Test or the grill rework yet. The flip is also
-  now a hold rather than a press. Boomerang isn't in the README either.
 - Boomerang has no menu icon yet, and its "1 & 2 & 3 &" and "1 2 3" counts
   catch on the same beat (only the cue noise and the hops tell them apart).
+- `docs/DEVELOPMENT.md` hasn't been checked against the November changes.
+
+## Housekeeping (Nov 12)
+
+Removed leftovers nothing used: `shaders/tint_grey.gdshader` (only the old
+example tongs used it), `audio/sfx/grill/scrape.wav`, and the backup files
+`table.png.bak`, `monkey_twist.png~` and `krita animation.kra~`. The README now
+covers the grill rework, Wizard Tower, the One-Burger Test and Boomerang, with a
+fresh menu screenshot.

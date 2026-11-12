@@ -27,8 +27,6 @@ keeping the same name.
 | `sizzle`     | quiet tail under `land` on a normal flip | `sizzle.wav` |
 | `pop`        | the patty lands on the bun (beat 3 of a pop) | `pop.wav` |
 
-`scrape.wav` isn't used by anything.
-
 ## One-Burger Test (`GrillTest.tscn`)
 
 | Slot | When it plays | Now |
