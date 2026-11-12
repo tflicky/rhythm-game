@@ -66,6 +66,7 @@ enum Anchor { CENTER, BOTTOM }
 @export var art_dust: Texture2D               ## optional puff where a bobbled fruit lands
 @export var art_twist_idle: Texture2D         ## twister monkey, resting against the trunk
 @export var art_twist_bump: Texture2D         ## twister monkey, hip in the trunk (shown on each fruit cue)
+@export var art_surfer: Texture2D             ## background cameo: monkey surfing a wave across the horizon mid-song
 
 @export_group("Art sizing")
 @export var fruit_px := 46.0
@@ -81,6 +82,31 @@ enum Anchor { CENTER, BOTTOM }
 @export var twist_bump_dur := 0.2            ## seconds he holds the bump pose
 @export var palm_shake := 0.035              ## radians the palm rocks when bumped (0 = off)
 @export var palm_shake_dur := 0.45
+
+@export_group("Surfer cameo (background, mid-song)")
+## Beat the wave starts sliding in from the right (song is ~152 beats, so ~halfway).
+@export var surf_start_beat := 72.0
+## How many beats it takes to cross the whole screen.
+@export var surf_beats := 16.0
+@export var surf_scale := 0.6
+## Fraction of the art's height (from the top) where its flat sea surface is --
+## that line is pinned to the ocean's horizon, so the wave rises out of the sea.
+@export var surf_waterline := 0.745
+@export var surf_bob := 5.0                 ## px the wave bobs on each beat
+## Fraction of the art's height (from the top) to draw. Everything below is
+## plain sea, so it's left to the ocean strip. Keep it a little below
+## surf_waterline so the wave's base still overlaps the horizon.
+@export var surf_clip := 0.785
+## The art's left/right edges fade out with partial alpha, which lets the ocean
+## show through the side swells. On: at load, swap that alpha fade for a shape
+## fade -- the swells flatten into the sea towards the edges, fully opaque.
+@export var surf_solid_edges := true
+
+@export_group("Ocean (background strip between sky and sand)")
+## Height of the strip of sea visible above the sand (0 = no ocean).
+@export var ocean_height := 80.0
+## Matches the sea in monkey_surfing.png, so the wave blends into it.
+@export var ocean_color := Color("4f74b1")
 
 @export_group("Sound  (empty -> silent; or drop files in res://audio/sfx/)")
 @export var sfx_cue: AudioStream       ## plays when a fruit leaves the tree (the beat before the catch); banana plays it twice, tap-tap
@@ -116,6 +142,7 @@ const AUTO := {
 	"art_monkey_bobble": "monkey_bobble.png", "art_monkey_hit": "monkey_hit.png",
 	"art_monkey_clap": "monkey_clap.png",
 	"art_twist_idle": "monkey_twist_0.png", "art_twist_bump": "monkey_twist_1.png",
+	"art_surfer": "monkey_surfing.png",
 	"art_stars": "stars.png", "art_dust": "dust.png",
 }
 const SFX_DIR := "res://audio/sfx/"
@@ -187,6 +214,9 @@ func _ready() -> void:
 	for t in [art_monkey_idle, art_monkey_catch, art_monkey_catch_banana, art_monkey_bobble, art_monkey_hit, art_monkey_clap]:
 		if t and not _mbbox.has(t):
 			_mbbox[t] = _opaque_bbox(t)
+
+	if art_surfer and surf_solid_edges:
+		art_surfer = _solidify_faded_edges(art_surfer, surf_waterline)
 
 	print("[coconut] art %d/%d, sfx %d/%d" % [art_n, AUTO.size(), sfx_n, SFX_AUTO.size()])
 
@@ -587,9 +617,117 @@ func _draw_background() -> void:
 		draw_texture_rect(art_background, Rect2(Vector2.ZERO, VP), false)
 	else:
 		draw_rect(Rect2(Vector2.ZERO, VP), Color(0.53, 0.79, 0.92))
+	# sky -> ocean -> surfer -> shore foam -> sand: the wave rises out of the
+	# sea, and its base disappears behind the beach
+	_draw_ocean()
+	_draw_surfer()
+	_draw_shore_foam()
+	if not art_background:
 		draw_rect(Rect2(0, ground_y, VP.x, VP.y - ground_y), Color(0.93, 0.85, 0.62))
 	if art_ground:
 		draw_texture_rect(art_ground, Rect2(0, ground_y, VP.x, VP.y - ground_y), false)
+
+
+func _sea_y() -> float:
+	return ground_y - ocean_height
+
+
+## The strip of sea between the horizon and the beach, with a few darker swell
+## strokes (like the ones in the surfing art) drifting slowly left.
+func _draw_ocean() -> void:
+	if ocean_height <= 0.0:
+		return
+	var top := _sea_y()
+	draw_rect(Rect2(0, top, VP.x, ocean_height + 2.0), ocean_color)
+	draw_line(Vector2(0, top), Vector2(VP.x, top), ocean_color.lightened(0.25), 3.0)
+	var beat: float = (Conductor.visual_position - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	var stroke := ocean_color.darkened(0.12)
+	var rows := [[0.3, 210.0, 70.0], [0.62, 260.0, 95.0]]   # [depth fraction, spacing, length]
+	for r in rows.size():
+		var row: Array = rows[r]
+		var y: float = top + ocean_height * float(row[0])
+		var gap: float = row[1]
+		var drift := fposmod(beat * (6.0 + r * 4.0), gap)    # nearer rows drift faster
+		var x := -gap + drift + r * gap * 0.5
+		while x < VP.x + gap:
+			draw_line(Vector2(x, y), Vector2(x + float(row[2]), y + 2.0), stroke, 3.0)
+			x += gap
+
+
+## Foam where the sea meets the sand, washing up a little on every beat.
+func _draw_shore_foam() -> void:
+	if ocean_height <= 0.0:
+		return
+	var beat: float = (Conductor.visual_position - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	var wash := 3.0 * sin(fposmod(beat, 1.0) * PI)
+	var pts := PackedVector2Array()
+	var n := 48
+	for i in n + 1:
+		var x := VP.x * i / n
+		pts.append(Vector2(x, ground_y - 5.0 - wash + 2.5 * sin(x * 0.03 + beat * 0.8)))
+	pts.append(Vector2(VP.x, ground_y + 2.0))
+	pts.append(Vector2(0, ground_y + 2.0))
+	draw_colored_polygon(pts, Color(1, 1, 1, 0.75))
+
+
+## Background cameo: a monkey surfing a big wave slides right -> left across the
+## ocean from surf_start_beat, over surf_beats, bobbing on the beat. The art's
+## sea surface is pinned to the horizon so the wave rises out of the ocean.
+## Purely clock-driven (no state), so restarts and seeking just work.
+func _draw_surfer() -> void:
+	if art_surfer == null or practice or cues.is_empty():
+		return
+	var beat: float = (Conductor.visual_position - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	var k := (beat - surf_start_beat) / maxf(surf_beats, 0.01)
+	if k < 0.0 or k > 1.0:
+		return
+	var sz: Vector2 = art_surfer.get_size() * surf_scale
+	var x := lerpf(VP.x + sz.x * 0.5, -sz.x * 0.5, k)
+	var ph := fposmod(beat, 1.0)
+	var bob := -surf_bob * sin(ph * PI)                     # lifts on every beat, settles between
+	var tilt := 0.015 * sin(beat * PI * 0.5)                # slow rock across each 2-beat swell
+	var anchor := Vector2(x, _sea_y() + 2.0 + bob)          # = the art's waterline
+	draw_set_transform(anchor, tilt, Vector2.ONE)
+	# Only draw the art down to just below its waterline. The flat sea under it
+	# is the same colour as the ocean strip, but drawing it would paint over the
+	# ocean's drifting swell strokes and leave a box-shaped gap around the wave.
+	var tex_sz: Vector2 = art_surfer.get_size()
+	var clip := clampf(surf_clip, surf_waterline, 1.0)
+	var src := Rect2(0, 0, tex_sz.x, tex_sz.y * clip)
+	draw_texture_rect_region(art_surfer, Rect2(-sz.x * 0.5, -sz.y * surf_waterline, sz.x, sz.y * clip), src)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Returns a copy of tex where the soft alpha fade on its left/right edges is
+## turned into a shape fade: in the faded columns, the fade amount sets how far
+## above the waterline the art may reach (0 = flat sea, 1 = full height), and
+## what's kept is fully opaque. So the side swells sink into the sea instead of
+## going see-through. Only touches columns whose bottom (plain sea) pixel is partly transparent.
+func _solidify_faded_edges(tex: Texture2D, waterline: float) -> Texture2D:
+	var img := tex.get_image()
+	if img == null:
+		return tex
+	img = img.duplicate()
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	var w := img.get_width()
+	var h := img.get_height()
+	var wl := h * waterline
+	var reach := h * 0.1         # tallest swell height allowed at the inner end of the fade, px
+	for x in w:
+		# the bottom row is plain sea, so its alpha is the edge fade for this column
+		var fade := img.get_pixel(x, h - 1).a
+		if fade >= 0.99 or fade <= 0.0:
+			continue               # solid art column, or empty
+		var cutoff := wl - reach * fade
+		for y in h:
+			var c := img.get_pixel(x, y)
+			if c.a <= 0.0:
+				continue
+			c.a = clampf(float(y) + 0.5 - cutoff, 0.0, 1.0)   # 1px antialiased top edge
+			img.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(img)
 
 
 ## Seconds since the latest bump was heard, or -1 if none is in progress.

@@ -1,0 +1,108 @@
+﻿{
+    "canvas":  [
+                   3508,
+                   2480
+               ],
+    "layers":  {
+                   "iceball":  {
+                                   "box":  [
+                                               1695,
+                                               469,
+                                               3196,
+                                               1313
+                                           ],
+                                   "files":  [
+                                                 "iceball_0.png",
+                                                 "iceball_1.png",
+                                                 "iceball_2.png",
+                                                 "iceball_3.png",
+                                                 "iceball_4.png"
+                                             ]
+                               },
+                   "firespell":  {
+                                     "box":  [
+                                                 388,
+                                                 551,
+                                                 2709,
+                                                 1789
+                                             ],
+                                     "files":  [
+                                                   "firespell_0.png",
+                                                   "firespell_1.png",
+                                                   "firespell_2.png",
+                                                   "firespell_3.png",
+                                                   "firespell_4.png",
+                                                   "firespell_5.png",
+                                                   "firespell_6.png",
+                                                   "firespell_7.png"
+                                               ]
+                                 },
+                   "fireball":  {
+                                    "box":  [
+                                                1695,
+                                                469,
+                                                3196,
+                                                1313
+                                            ],
+                                    "files":  [
+                                                  "fireball_0.png",
+                                                  "fireball_1.png",
+                                                  "fireball_2.png",
+                                                  "fireball_3.png",
+                                                  "fireball_4.png"
+                                              ]
+                                },
+                   "icespell":  {
+                                    "box":  [
+                                                388,
+                                                566,
+                                                2709,
+                                                1789
+                                            ],
+                                    "files":  [
+                                                  "icespell_0.png",
+                                                  "icespell_1.png",
+                                                  "icespell_2.png",
+                                                  "icespell_3.png",
+                                                  "icespell_4.png",
+                                                  "icespell_5.png",
+                                                  "icespell_6.png",
+                                                  "icespell_7.png"
+                                              ]
+                                },
+                   "gnome_hands":  {
+                                       "box":  [
+                                                   609,
+                                                   2115,
+                                                   730,
+                                                   2219
+                                               ],
+                                       "files":  [
+                                                     "gnome_hands.png"
+                                                 ]
+                                   },
+                   "wand":  {
+                                "box":  [
+                                            452,
+                                            1775,
+                                            955,
+                                            2423
+                                        ],
+                                "files":  [
+                                              "wand.png"
+                                          ]
+                            },
+                   "gnome":  {
+                                 "box":  [
+                                             0,
+                                             1772,
+                                             762,
+                                             2271
+                                         ],
+                                 "files":  [
+                                               "gnome_0.png",
+                                               "gnome_1.png"
+                                           ]
+                             }
+               }
+}

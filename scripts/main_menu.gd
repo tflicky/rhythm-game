@@ -18,6 +18,12 @@ const LEVELS := [
 			{"tex": "res://art/grilling/icon/tongs.png", "pos": Vector2(-2, 0), "size": Vector2(74, 74), "rot": -10.0},
 			{"tex": "res://art/grilling/icon/grill.png", "pos": Vector2(30, 20), "size": Vector2(94, 94), "rot": 18.0},
 		]},
+	{"title": "Wizard", "scene": "res://Wizard.tscn",
+		"color": Color(0.36, 0.33, 0.66),
+		"icon": [
+			# built by tools/make_wizard_icon.ps1 from the exported Krita frames
+			{"tex": "res://art/wizard/icon.png", "pos": Vector2(0, 0), "size": Vector2(110, 110)},
+		]},
 ]
 
 const ICON_SIZE := Vector2(110, 110)
