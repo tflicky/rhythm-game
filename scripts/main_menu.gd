@@ -26,7 +26,11 @@ const LEVELS := [
 			{"tex": "res://art/wizard/icon.png", "pos": Vector2(-10, -12), "size": Vector2(126, 126)},
 		]},
 	{"title": "Juggling", "scene": "res://Juggle.tscn",
-		"color": Color(0.8, 0.36, 0.3)},
+		"color": Color(0.8, 0.36, 0.3),
+		"icon": [
+			# stand-in drawn by tools/make_juggle_icon.gd -- swap in your own icon.png
+			{"tex": "res://art/juggling/icon.png", "pos": Vector2(-14, -16), "size": Vector2(136, 136)},
+		]},
 ]
 
 const ICON_SIZE := Vector2(110, 110)

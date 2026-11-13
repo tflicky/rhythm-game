@@ -333,3 +333,11 @@ My design calls:
 - A curtain closes and opens between acts. Rhythms to start: 1 2 3 4 / 1 2 3 & 4 /
   1 2 & 3 4 &.
 - Placeholder art and the monkey song for now; my own song and drawings come next.
+
+## A menu icon for Juggling (Nov 13, later still)
+
+*"make a menu icon for the juggling level"*. Juggling was the only level with an
+empty icon slot. It now shows one prop for each act (a flaming sword, a bowling pin
+and a tennis ball) on a dotted juggling arc. No juggling art exists yet, so the icon
+is drawn in code by `tools/make_juggle_icon.gd`, which renders it to
+`art/juggling/icon.png`. Saving my own drawing over that PNG replaces it.
