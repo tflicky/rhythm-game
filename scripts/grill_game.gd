@@ -2,7 +2,7 @@ extends Node2D
 ## "Grill Master" minigame. Cue and response: the grill tells you what it needs
 ## one bar ahead, in the rhythm you'll play -- the salt and pepper shakers hop
 ## with a shake-shake when it needs seasoning, and the patty bubbles up with a
-## ding-ding when it's ready to flip (gold double-ding: onto the bun). You answer
+## small sizzle then a big sizzle when it's ready to flip (pop-pop: onto the bun). You answer
 ## on the next bar with SPACE, in the same rhythm.
 ## Only the answers are graded. Clacks are presses; a flip (or the pop) is a HOLD:
 ## press on beat 1 to grab, let go on beat 2 to toss, and it lands on 3 by itself.
@@ -40,6 +40,7 @@ const GOOD := 0.15
 const MISS_TAIL := 0.03            ## seconds past the late edge of GOOD before it's a Miss
 const VP := Vector2(1152, 648)
 const INK := Color(0.2, 0.14, 0.12)
+const HUD_EDGE := Color(1, 0.97, 0.88, 0.9)   ## outline behind the score text
 ## Beats within a bar for each move (flip / pop: beats 1-2-3).
 const PATTERN := {"tap": [2.5, 3.0], "flip": [0.0, 1.0, 2.0], "pop": [0.0, 1.0, 2.0]}
 ## Every sound in the game is a file you make, in SFX_DIR, named after its slot
@@ -137,7 +138,7 @@ var _practice_passed := false
 var _song_stream: AudioStream
 var _metronome: AudioStreamWAV
 
-var _calls: Array = []             ## { beat, time, cue, part, sounded, shown } -- the cues (shaker hops, patty dings)
+var _calls: Array = []             ## { beat, time, cue, part, sounded, shown } -- the cues (shaker hops, patty sizzles)
 var _answers: Array = []           ## { beat, time, cue, part, bar, act: "press" | "release" } -- still to grade, in order
 var _autos: Array = []             ## your flips' beat-3 landings: { beat, time, cue, bar, sounded, shown }
 var _bars := {}                    ## bar id -> { left: int, missed: bool } (practice success)
@@ -433,7 +434,7 @@ func _start_song() -> void:
 				pops += 1
 				_cook_totals.append(0)
 				_season_totals.append(0)
-		if role == "call":             # a cue: the shakers hop / the patty dings
+		if role == "call":             # a cue: the shakers hop / the patty sizzles
 			cue["sounded"] = false
 			cue["shown"] = false
 			_calls.append(cue)
@@ -577,6 +578,7 @@ func _current_cycle() -> Variant:
 # --- per frame -------------------------------------------------------------------
 
 func _process(_dt: float) -> void:
+	$Field.cameo_on = _phase == Phase.SONG   # the football throw is for the real song only
 	var now: float = Conductor.song_position
 	var vis: float = Conductor.visual_position
 	var latency := AudioServer.get_output_latency()
@@ -766,15 +768,16 @@ func _cue_show(cue: String, part: int) -> void:
 		_fx.append({"kind": "cue_ring", "t0": t, "pos": bun_pos + Vector2(0, 30), "col": col})
 
 
-## A cue's sound: a shaker rattle (salt higher, pepper lower), or a bell ding on
-## beats 1 and 2 of a flip (the pop: a brighter double ding).
+## A cue's sound: the salt / pepper call (your tong click, pitched up / down -- not
+## the shake you answer with), or on beats 1 and 2 of a flip a small sizzle then a
+## big sizzle (cut from your sizzle.wav). A pop bar: your pop sound on 1 and 2.
 func _cue_sound(cue: String, part: int) -> void:
 	if cue == "tap":
 		_play_sfx("salt_cue" if part == 0 else "pepper_cue", -4.0)
 	elif part == 0:
-		_play_sfx("pop_cue" if cue == "pop" else "flip_cue_1", -6.0)
+		_play_sfx("pop_cue" if cue == "pop" else "flip_cue_1", 0.0)
 	elif part == 1:
-		_play_sfx("pop_cue" if cue == "pop" else "flip_cue_2", -6.0)
+		_play_sfx("pop_cue" if cue == "pop" else "flip_cue_2", 0.0)
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -1295,14 +1298,18 @@ func _draw_fx() -> void:
 		_draw_closeup(l, font)
 		return
 	if _phase == Phase.SONG:
+		# a light outline keeps the HUD readable where it sits over the grill lid
+		l.draw_string_outline(font, Vector2(VP.x - 250, 52), "SCORE  %d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, 8, HUD_EDGE)
 		l.draw_string(font, Vector2(VP.x - 250, 52), "SCORE  %d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, INK)
 		var pulse := 1.0 + 0.35 * clampf(1.0 - (Time.get_ticks_msec() - _combo_ms) / 180.0, 0.0, 1.0)
 		var ccol := INK.lerp(PERFECT_COL.darkened(0.2), clampf(combo / 10.0, 0.0, 1.0))
 		l.draw_set_transform(Vector2(VP.x - 250, 80), 0.0, Vector2(pulse, pulse))
+		l.draw_string_outline(font, Vector2(0, 8), "COMBO  x%d" % combo, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, 8, HUD_EDGE)
 		l.draw_string(font, Vector2(0, 8), "COMBO  x%d" % combo, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, ccol)
 		l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		l.draw_string(font, Vector2(VP.x - 250, 122), "BURGER  %d / %d" % [mini(_served.size() + 1, _burger_count), _burger_count],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(INK, 0.75))
+		var bt := "BURGER  %d / %d" % [mini(_served.size() + 1, _burger_count), _burger_count]
+		l.draw_string_outline(font, Vector2(VP.x - 250, 122), bt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 8, HUD_EDGE)
+		l.draw_string(font, Vector2(VP.x - 250, 122), bt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, INK)
 	else:
 		_draw_practice(l, font)
 	if _held and _pflip.get("hit", 0) == 1 and not _pflip.get("fail", true):
@@ -1507,7 +1514,7 @@ func _draw_card(l: Node2D, font: Font) -> void:
 			lines = [["HOW TO PLAY", 34, INK],
 				["The tongs are YOURS.", 24, Color(0.6, 0.4, 0.0)],
 				["The grill tells you what it needs, one bar ahead:", 22, INK],
-				["shakers hop = season it.  Patty dings = flip it!", 22, Color(0.75, 0.4, 0.1)],
+				["shakers hop = season it.  Patty sizzles = flip it!", 22, Color(0.75, 0.4, 0.1)],
 				["", 10, INK],
 				["Listen to the cue's rhythm, then press SPACE", 22, INK],
 				["in that same rhythm on the next bar.", 22, INK]]
@@ -1518,7 +1525,7 @@ func _draw_card(l: Node2D, font: Font) -> void:
 			strip_cue = "tap"
 		Card.FLIP:
 			lines = [["MOVE 2:  THE FLIP", 34, INK],
-				["Patty dings on 1 and 2? It's ready! Next bar,", 22, INK],
+				["Small sizzle, BIG sizzle? It's ready! Next bar,", 22, INK],
 				["HOLD SPACE on 1 to grab it, LET GO on 2 to toss it.", 22, INK]]
 			strip_cue = "flip"
 		Card.READY:
@@ -1527,8 +1534,8 @@ func _draw_card(l: Node2D, font: Font) -> void:
 				["Listen for the cue, answer it on the next bar.", 22, INK],
 				["", 10, INK],
 				["Shakers hop?  Salt, then pepper.", 22, INK],
-				["Patty dings?  HOLD on 1, let go on 2.", 22, INK],
-				["Gold ding = it goes on the bun -- next burger!", 22, Color(0.75, 0.25, 0.2)]]
+				["Sizzle, SIZZLE?  HOLD on 1, let go on 2.", 22, INK],
+				["Pop, pop = it goes on the bun -- next burger!", 22, Color(0.75, 0.25, 0.2)]]
 	l.draw_style_box(_panel_sb, box)
 	var ty := y + 50.0
 	for ln in lines:

@@ -211,3 +211,46 @@ example tongs used it), `audio/sfx/grill/scrape.wav`, and the backup files
 `table.png.bak`, `monkey_twist.png~` and `krita animation.kra~`. The README now
 covers the grill rework, Wizard Tower, the One-Burger Test and Boomerang, with a
 fresh menu screenshot.
+
+## Grill Master: your own sounds and backdrop (Nov 12)
+
+The goal for the day, in my words: *"The goal is to use as little of your sound
+effects as possible and try to use what I can create."* Every grill sound and the
+new backdrop pieces now come from my own recordings and drawings.
+
+**Sounds**
+
+- **Flip cue:** the two bell dings became *"a small sizzle and then a big
+  sizzle. Then that's your cue to flip."* Both are cut from my `sizzle.wav`
+  (`flip_cue_1.wav` / `flip_cue_2.wav`), started right on the loud part so they
+  land on the beat. Tutorial cards now say "Small sizzle, BIG sizzle?".
+- **Salt & pepper call:** made different from the shake you answer with. It's my
+  `tong.wav`, pitched up for salt and down for pepper.
+- **Salt & pepper shakes (your answer):** single strokes from the shaker take I
+  recorded for the Barrel Blast tribute video, one pitched up for salt, one down
+  for pepper.
+- **Pop call (onto the bun):** my own "Pop sound" recording replaced the gold
+  double ding. It was recorded very quietly with half a second of silence in
+  front, so it got trimmed to the pop and turned up.
+- **Bug:** the first sizzle cut was *"very staticky and loud compared to the
+  others and it cuts off very unnaturally."* I had boosted it ~13 dB through a
+  limiter, which pumped up the hiss, and gave it a short fade. Fixed by dropping
+  the boost, filtering out the harsh top end (and the rumble), setting levels
+  under the other sounds, and giving both a long, smooth fade-out.
+
+Only the whoosh (let go) and the landing thump are still placeholder sounds.
+
+**Layout and backdrop**
+
+- Grill (with tongs and patty) moved 100 px right; the picnic table is 20%
+  bigger and moved right, with the shakers, served-burger spots and ground
+  shadows moved to match. The score text got a light outline since the grill lid
+  now sits behind it.
+- Drew my own **grass tuft, bush and football** in `krita animation.kra`, exported
+  to `art/grilling/scene/`. The grass replaces the code-drawn tufts, spread
+  evenly after *"there are too many grass sprites concentrated towards the
+  front."* The bush sits where I drew it, and small copies of it now make up the
+  hazy line along the horizon.
+- **Football cameo:** like the surfing monkey, a football gets thrown once across
+  the sky behind everything, beats 80–88 (a stretch with no cues), nose following
+  the arc with a little spiral wobble. Song only, not practice.

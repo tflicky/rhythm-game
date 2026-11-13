@@ -13,13 +13,13 @@ keeping the same name.
 
 | Slot | When it plays | Now |
 |------|---------------|-----|
-| `salt_cue`   | cue: the salt shaker hops ("season me", first clack) | placeholder rattle |
-| `pepper_cue` | cue: the pepper shaker hops (second clack) | placeholder rattle |
-| `flip_cue_1` | cue: patty bubbles on beat 1 of a flip bar | placeholder bell |
-| `flip_cue_2` | cue: patty bubbles on beat 2 of a flip bar | placeholder bell |
-| `pop_cue`    | cue: beats 1 and 2 of a pop bar (the flip onto the bun) | placeholder bell |
-| `salt_shake` | your salt shake (first press of a seasoning pair) | placeholder rattle |
-| `pepper_shake` | your pepper shake (second press) | placeholder rattle |
+| `salt_cue`   | cue: the salt shaker hops ("season me", first clack) | `salt_cue.wav` = your tong.wav pitched up |
+| `pepper_cue` | cue: the pepper shaker hops (second clack) | `pepper_cue.wav` = your tong.wav pitched down |
+| `flip_cue_1` | cue: SMALL sizzle on beat 1 of a flip bar | `flip_cue_1.wav` = 0.18 s cut of your sizzle.wav, quiet |
+| `flip_cue_2` | cue: BIG sizzle on beat 2 of a flip bar | `flip_cue_2.wav` = 0.45 s cut of your sizzle.wav, loud |
+| `pop_cue`    | cue: beats 1 and 2 of a pop bar (the flip onto the bun) | `pop_cue.wav` = your "Pop sound" recording, trimmed + turned up |
+| `salt_shake` | your salt shake (first press of a seasoning pair) | `salt_shake.wav` = one stroke of your Barrel Blast shaker take, pitched up a bit |
+| `pepper_shake` | your pepper shake (second press) | `pepper_shake.wav` = another stroke of your shaker take, pitched down a bit |
 | `tong`       | a press when there's nothing to answer (the tongs just click) | `tong.wav` |
 | `flip`       | your grab on beat 1 (press) | `flip.wav` |
 | `whoosh`     | your toss on beat 2 (let go) | placeholder noise |
