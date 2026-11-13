@@ -156,9 +156,6 @@ var _fx: Array = []                ## deflect / bonk_star / bonk_fall, outliving
 var _warn_next := 0                ## next cue in cues[] whose warning hasn't been handled
 var _pending_tap2_at := -1.0       ## song_position to fire the banana's 2nd tap, or -1
 
-var score := 0
-var combo := 0
-var best_combo := 0
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
 var _monkey_state := "idle"
 var _monkey_fruit := ""
@@ -168,7 +165,7 @@ var _finished := false
 var _last_press := ""
 
 ## Practice round (driven by rhythm.gd): shows "YOU" over the catcher, the
-## instructions and a catch counter instead of the score HUD.
+## instructions and a catch counter instead of the HUD.
 var practice := false
 var practice_caught := 0
 var practice_goal := 3
@@ -275,9 +272,6 @@ func begin(compiled_cues: Array) -> void:
 	_fx.clear()
 	_warn_next = 0
 	_pending_tap2_at = -1.0
-	score = 0
-	combo = 0
-	best_combo = 0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	_monkey_state = "idle"
 	_bump_t = -10.0
@@ -420,14 +414,7 @@ func _log_press(what: String, err: float) -> void:
 
 
 func _resolve(f: Dictionary, grade: String) -> void:
-	var fruit: String = f["cue"]["cue"]
 	_tally[grade] += 1
-	if grade == "Miss":
-		combo = 0
-	else:
-		combo += 1
-		best_combo = maxi(best_combo, combo)
-		score += (100 if grade == "Perfect" else 50) + (20 if fruit == "banana" else 0)
 	_falling.erase(f)
 	graded.emit(grade)
 
@@ -854,8 +841,6 @@ func _draw_fruit(pos: Vector2, a: float, kind: String, rot := 0.0) -> void:
 
 func _draw_hud() -> void:
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(HUD_LEFT, 52), "SCORE  %d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(0.15, 0.15, 0.2))
-	draw_string(font, Vector2(HUD_LEFT, 88), "COMBO  x%d" % combo, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0.15, 0.15, 0.2))
 	if show_press_timing and _last_press != "":
 		draw_string(font, Vector2(HUD_LEFT, 116), _last_press, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.15, 0.15, 0.2))
 
@@ -867,11 +852,9 @@ func _draw_results() -> void:
 	var x := box.position.x + 32
 	var y := box.position.y + 54
 	draw_string(font, Vector2(x, y), "RESULTS", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color.WHITE)
-	draw_string(font, Vector2(x, y + 50), "Caught    %d" % _tally["Perfect"], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0.7, 1.0, 0.6))
-	draw_string(font, Vector2(x, y + 82), "Bobbled   %d" % _tally["Good"], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.9, 0.5))
-	draw_string(font, Vector2(x, y + 114), "Bonked    %d" % _tally["Miss"], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 0.5, 0.5))
-	draw_string(font, Vector2(x, y + 154), "Score %d   Best x%d" % [score, best_combo], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
-	draw_string(font, Vector2(x, y + 186), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.8, 0.8, 0.8))
+	var got: int = _tally["Perfect"] + _tally["Good"]
+	Results.draw(self, font, Vector2(x, y + 50), got, got + _tally["Miss"], Color.WHITE)
+	draw_string(font, Vector2(x, y + 160), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.8, 0.8, 0.8))
 
 
 # --- practice round ----------------------------------------------------------

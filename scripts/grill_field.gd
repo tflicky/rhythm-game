@@ -5,7 +5,8 @@ extends Node2D
 ## near the top, the grass fades lighter into the distance, tufts shrink toward
 ## the horizon, and soft shadows sit under the table, bench and grill so they
 ## stand on the ground. Your art takes over where it exists: grass tufts
-## (art/grilling/scene/grass.png), a bush (bush.png), and a football that gets
+## (art/grilling/scene/grass.png), a bush (bush.png, small and repeated as the
+## line along the horizon), and a football that gets
 ## thrown across the background once mid-song (football.png) -- like the
 ## monkey level's surfer cameo.
 ## Visible in the editor too (@tool), so you can drag the shadows into place.
@@ -37,6 +38,15 @@ const ART_DIR := "res://art/grilling/scene/"
 	set(v): shadows = v; queue_redraw()
 @export var shadow_color := Color(0.12, 0.3, 0.1, 0.28):
 	set(v): shadow_color = v; queue_redraw()
+## Shaped shadows: each is the outline of a flat top (tabletop, bench seat) as
+## it sits on screen, dropped straight down onto the grass by `shadow_drops`
+## (the leg height there) -- so the shadow sits right under it, like a high sun.
+@export var shadow_shapes: Array[PackedVector2Array] = []:
+	set(v): shadow_shapes = v; queue_redraw()
+@export var shadow_drops: PackedVector2Array = []:
+	set(v): shadow_drops = v; queue_redraw()
+@export var shape_shadow_color := Color(0.08, 0.22, 0.06, 0.5):
+	set(v): shape_shadow_color = v; queue_redraw()
 
 @export_group("Your art")
 ## Your grass tuft, scattered over the field (smaller toward the horizon).
@@ -48,11 +58,13 @@ const ART_DIR := "res://art/grilling/scene/"
 	set(v): grass_scale_near = v; queue_redraw()
 @export var art_bush: Texture2D:
 	set(v): art_bush = v; queue_redraw()
-## Where your bush sits on screen (as placed in your Krita scene).
-@export var bush_rect := Rect2(87, 33, 189, 91):
-	set(v): bush_rect = v; queue_redraw()
 @export var horizon_bush_h := 24.0:      ## height of the little bushes along the horizon
 	set(v): horizon_bush_h = v; queue_redraw()
+## How far up the bushes (fraction of their height) the solid band behind them reaches.
+@export var horizon_band := 0.55:
+	set(v): horizon_band = v; queue_redraw()
+@export var horizon_band_color := Color(0.03, 0.3, 0.12):
+	set(v): horizon_band_color = v; queue_redraw()
 @export var horizon_haze := 0.4:         ## 0 = horizon bushes at full colour, 1 = faded into the sky
 	set(v): horizon_haze = v; queue_redraw()
 ## How the tufts spread from horizon to front: 1 = even, higher = more toward the horizon.
@@ -101,6 +113,9 @@ func _draw() -> void:
 	# a faint, bushy line along the horizon so the field reads as far away:
 	# your bush, small and repeated (or plain circles until bush.png exists)
 	if art_bush:
+		# a flat, darker-green band along the horizon behind the bushes, so no
+		# sky shows through the gaps between them -- the bush tops still poke up
+		draw_rect(Rect2(0, horizon_y - horizon_bush_h * horizon_band, size.x, horizon_bush_h * horizon_band + 4.0), horizon_band_color)
 		var hr := RandomNumberGenerator.new()
 		hr.seed = 7
 		var x := -20.0
@@ -122,8 +137,22 @@ func _draw() -> void:
 			draw_circle(Vector2(x, horizon_y - r * 0.45), r, trees)
 	# grass: lighter and hazier far away, richer up close
 	_vgradient(horizon_y, size.y, grass_far, grass_near, 24)
-	if art_bush:
-		draw_texture_rect(art_bush, bush_rect, false)
+	# shaped shadows: soft edge (a few grown copies, faint) around a darker core
+	for i in shadow_shapes.size():
+		var drop: Vector2 = shadow_drops[i] if i < shadow_drops.size() else Vector2.ZERO
+		var pts: PackedVector2Array = shadow_shapes[i]
+		if pts.size() < 3:
+			continue
+		var c := Vector2.ZERO
+		for p in pts:
+			c += p
+		c /= pts.size()
+		for k in 5:
+			var grow := 14.0 - k * 3.5        # px: biggest + faintest first
+			var ring := PackedVector2Array()
+			for p in pts:
+				ring.append(p + drop + (p - c).normalized() * grow)
+			draw_colored_polygon(ring, Color(shape_shadow_color, shape_shadow_color.a * 0.3))
 	# soft shadows under the furniture (stacked ellipses fake a blur)
 	for s in shadows:
 		for k in 4:

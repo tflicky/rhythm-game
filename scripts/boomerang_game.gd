@@ -80,9 +80,6 @@ var _pops: Array = []              ## { text, col, v0, pos }
 var _balloons: Array = []          ## { boom, hit_t, hit_v, pos, scale, col, vel, sway, state }
 var _swing := {"kind": "", "v": -10.0}   ## last arm move: throw / catch / whiff / fumble
 var _bonk_v := -10.0               ## when a missed boomerang last hit you on the head
-var score := 0
-var combo := 0
-var best_combo := 0
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
 
 
@@ -140,9 +137,6 @@ func _start() -> void:
 	_pops.clear()
 	_swing = {"kind": "", "v": -10.0}
 	_bonk_v = -10.0
-	score = 0
-	combo = 0
-	best_combo = 0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	_balloons.clear()
 	var rng := RandomNumberGenerator.new()
@@ -250,14 +244,10 @@ func _press() -> void:
 
 func _hit(grade: String) -> void:
 	_tally[grade] += 1
-	combo += 1
-	best_combo = maxi(best_combo, combo)
-	score += (100 if grade == "Perfect" else 50) + mini(combo, 20) * 5
 
 
 func _miss(text: String, at_v: float) -> void:
 	_tally["Miss"] += 1
-	combo = 0
 	_pops.append({"text": text, "col": Color(0.85, 0.15, 0.15), "v0": at_v, "pos": HAND + Vector2(70, -40)})
 
 
@@ -310,7 +300,6 @@ func _process(_delta: float) -> void:
 		for bl in _balloons:
 			if bl["state"] == "float" and bl["boom"]["thrown_ok"] and pos >= bl["hit_t"] - lat:
 				bl["state"] = "pop"
-				score += 20
 				_play("pop", -2.0)
 		_pops = _pops.filter(func(p): return v - p["v0"] < 0.7)
 	queue_redraw()
@@ -606,9 +595,6 @@ func _draw_board(v: float) -> void:
 
 
 func _draw_hud() -> void:
-	_text("SCORE  %d" % score, Vector2(24, VP.y - 52), 24, Color.WHITE, false, 0.6)
-	if combo >= 2:
-		_text("%d COMBO" % combo, Vector2(24, VP.y - 22), 20, Color(1, 0.95, 0.6), false, 0.6)
 	_text("SPACE  throw / catch", Vector2(VP.x - 250, VP.y - 22), 18, Color(1, 1, 1, 0.9), false, 0.6)
 
 
@@ -632,10 +618,8 @@ func _draw_card() -> void:
 func _draw_results() -> void:
 	_panel(Rect2(326, 150, 500, 320))
 	_text("WHAT A THROW!" if _tally["Miss"] <= 5 else "BONKED A FEW TIMES", Vector2(576, 210), 32, INK, true)
-	_text("Perfect  %d" % _tally["Perfect"], Vector2(576, 270), 24, INK, true)
-	_text("Good  %d" % _tally["Good"], Vector2(576, 304), 24, INK, true)
-	_text("Miss  %d" % _tally["Miss"], Vector2(576, 338), 24, INK, true)
-	_text("Best combo  %d     Score  %d" % [best_combo, score], Vector2(576, 384), 22, INK, true)
+	var got: int = _tally["Perfect"] + _tally["Good"]
+	Results.draw(self, _font, Vector2(576, 270), got, got + _tally["Miss"], INK, true)
 	_text("SPACE / R to play again   -   Esc for menu", Vector2(576, 440), 18, INK.lightened(0.4), true)
 
 

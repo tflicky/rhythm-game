@@ -97,9 +97,6 @@ var _pops: Array = []              ## { text, col, t0 } grade text by the burst
 var _scars: Array = []             ## { kind, x } scorch / frost marks on your wall
 var _cast_v := -10.0               ## visual time of the last cast (wand recoil)
 var _hurt := {}                    ## { kind, v } last hit you took (flash + shake)
-var score := 0
-var combo := 0
-var best_combo := 0
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
 
 var _impact_s: Vector2             ## burst point on screen
@@ -177,9 +174,6 @@ func _start() -> void:
 	_pops.clear()
 	_scars.clear()
 	_hurt = {}
-	score = 0
-	combo = 0
-	best_combo = 0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	var bar := FIRST_CALL_BAR
 	for pat in PATTERNS:
@@ -254,9 +248,6 @@ func _cast(kind: String) -> void:
 			spell["impact"] = maxf(v + 0.05, b["arrive_v"])
 			b["impact"] = spell["impact"]
 			_tally[grade] += 1
-			combo += 1
-			best_combo = maxi(best_combo, combo)
-			score += (100 if grade == "Perfect" else 50) + mini(combo, 20) * 5
 			_pops.append({"text": grade + "!" if grade == "Perfect" else grade,
 				"col": COL[kind], "t0": spell["impact"]})
 	_spells.append(spell)
@@ -274,7 +265,6 @@ func _cut_burst(b: Dictionary) -> void:
 
 func _miss() -> void:
 	_tally["Miss"] += 1
-	combo = 0
 
 
 # --- clock -----------------------------------------------------------------------
@@ -515,9 +505,6 @@ func _draw_wall() -> void:
 
 
 func _draw_hud() -> void:
-	_text("SCORE  %d" % score, Vector2(24, 40), 24, Color.WHITE)
-	if combo >= 2:
-		_text("%d COMBO" % combo, Vector2(24, 72), 20, Color(1, 0.85, 0.4))
 	_text("A / Left", Vector2(VP.x - 300, VP.y - 22), 18, Color(1, 1, 1, 0.8))
 	_text("ICE", Vector2(VP.x - 222, VP.y - 22), 18, COL["ice"])
 	_text("D / Right", Vector2(VP.x - 160, VP.y - 22), 18, Color(1, 1, 1, 0.8))
@@ -539,10 +526,8 @@ func _draw_card() -> void:
 func _draw_results() -> void:
 	_panel(Rect2(326, 150, 500, 320))
 	_text("TOWER DEFENDED!" if _tally["Miss"] <= 6 else "THE TOWER IS SCORCHED", Vector2(576, 210), 32, INK, true)
-	_text("Perfect  %d" % _tally["Perfect"], Vector2(576, 270), 24, INK, true)
-	_text("Good  %d" % _tally["Good"], Vector2(576, 304), 24, INK, true)
-	_text("Miss  %d" % _tally["Miss"], Vector2(576, 338), 24, INK, true)
-	_text("Best combo  %d     Score  %d" % [best_combo, score], Vector2(576, 384), 22, INK, true)
+	var got: int = _tally["Perfect"] + _tally["Good"]
+	Results.draw(self, _font, Vector2(576, 270), got, got + _tally["Miss"], INK, true)
 	_text("SPACE / R to play again   -   Esc for menu", Vector2(576, 440), 18, INK.lightened(0.4), true)
 
 

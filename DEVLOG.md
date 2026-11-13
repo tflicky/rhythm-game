@@ -254,3 +254,44 @@ Only the whoosh (let go) and the landing thump are still placeholder sounds.
 - **Football cameo:** like the surfing monkey, a football gets thrown once across
   the sky behind everything, beats 80–88 (a stretch with no cues), nose following
   the arc with a little spiral wobble. Song only, not practice.
+
+## No more points, a calmer tutorial, and grill polish (Nov 13)
+
+**Scoring, every level.** *"I don't really want there to be points or anything. I
+just want it to tell you how many you got out of how many there were and tell the
+player the percent."* SCORE and COMBO are gone from all four levels (and the banana /
+balloon bonuses with them). Every results screen now says "You got X / Y" with a big
+percent coloured red at 0%, reddish yellow at 50%, green at 100%, blending in
+between. One shared file, `scripts/results.gd`, draws it for every level.
+
+**Grill Master tutorial.** This took a few rounds:
+- First: a count-in bar (4, 3, 2, 1 over the tongs) between the example and your
+  try, because going straight from the example into "your turn" was abrupt and
+  players had to rewatch it. It drops after your first clean try so you finish at
+  song speed.
+- Then *"clunky and cluttered"*: 4 cards became 2, and messages only show when a try fails.
+- Then *"I want to do it how Rhythm Heaven does their tutorials... I dislike all the
+  text. I want it to be simple and easy to understand."* Big text boxes became a
+  slim caption bar, and the strip, labels and side panel came out.
+- Then *"the 1 & 2 & thing at the top was the best option we had"*, so the rhythm
+  strip came back, with short titles (Listen / Get ready / Your turn!). The fix I
+  actually wanted: *"some build up to where it teaches you the hold thing because it
+  happens at beat one... the progress bar to start a little earlier."* The strip now
+  shows a faded "4 &" of the bar before and switches a beat early, so you watch the
+  playhead come into the HOLD on beat 1.
+
+**Grill polish**
+- The tongs draw on top of everything (shakers, steam, plate), and they moved right
+  so they don't block the salt and pepper. They also have a dark outline now; they
+  were hard to see as light grey on light grass and the tan table.
+- Pressing SPACE with nothing to answer makes the tongs clap together.
+- Table and bench shadows: the soft ovals *"don't feel realistic"*, so each shadow is
+  now the shape of the tabletop / bench seat dropped straight down under it.
+- The big bush is gone; my bush is only the horizon line now, on a solid dark-green
+  band so no sky shows through the gaps.
+- Bug: the outline shader first failed to compile (Godot doesn't allow `return` in a
+  canvas shader's fragment()), which also killed the raw-patty colouring until fixed.
+
+**Menu icons:** Monkey Business is just the banana now; Wizard is just the gnome
+(the icon script got reframed so the gnome fills it). Got there after a couple of
+tries: fireball only, then gnome + fireball, then gnome only.

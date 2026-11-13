@@ -9,8 +9,8 @@ const LEVELS := [
 		# icon layers, back to front: texture, top-left and size inside the ICON_SIZE box,
 		# optional rot in degrees (spins around the layer's own centre)
 		"icon": [
-			{"tex": "res://art/monkey/coconut.png", "pos": Vector2(-8, -2), "size": Vector2(96, 96), "rot": -18.0},
-			{"tex": "res://art/monkey/banana.png", "pos": Vector2(38, 30), "size": Vector2(80, 80), "rot": 22.0},
+			# just the banana bunch
+			{"tex": "res://art/monkey/banana.png", "pos": Vector2(0, 0), "size": Vector2(110, 110)},
 		]},
 	{"title": "Grill Master","scene": "res://Grill.tscn",
 		"color": Color(0.85, 0.42, 0.2),
@@ -21,8 +21,9 @@ const LEVELS := [
 	{"title": "Wizard", "scene": "res://Wizard.tscn",
 		"color": Color(0.36, 0.33, 0.66),
 		"icon": [
-			# built by tools/make_wizard_icon.ps1 from the exported Krita frames
-			{"tex": "res://art/wizard/icon.png", "pos": Vector2(0, 0), "size": Vector2(110, 110)},
+			# built by tools/make_wizard_icon.ps1 from the exported Krita frames:
+			# just the gnome
+			{"tex": "res://art/wizard/icon.png", "pos": Vector2(-10, -12), "size": Vector2(126, 126)},
 		]},
 	{"title": "Boomerang", "scene": "res://Boomerang.tscn",
 		"color": Color(0.8, 0.36, 0.3)},

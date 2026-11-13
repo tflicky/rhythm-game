@@ -33,7 +33,7 @@ extends Node2D
 ##   Space / click  answer     S  skip practice     R  restart     Esc  menu
 
 enum Phase { CARD, PRACTICE, SONG }
-enum Card { WELCOME, CLACK, FLIP, READY }
+enum Card { SEASON, FLIP }
 
 const PERFECT := 0.075
 const GOOD := 0.15
@@ -74,6 +74,10 @@ const SEASON_MS := 420.0           ## a seasoning: the shaker lifts toward the g
 const SEASON_REACH := Vector2(38, -30)   ## how far it leans out toward the grill (screen px)
 const KNOCK_MS := 240.0            ## a knock: tongs on the shaker, then back to rest
 const KNOCK_HOLD_MS := 50.0        ## ...staying on the shaker this long first
+## Practice strip: how many beats of the bar before it shows (the "4 &" lead-in),
+## and how early it moves on to the next bar -- so you see beat 1 coming.
+const STRIP_LEAD := 1.0
+const CLAP_MS := 170.0             ## a press with nothing to answer: the tongs clap shut and open (the "tap" frames)
 const FLY := 0.3                  ## seconds a pinch of salt / pepper takes to arc onto the patty
 const PLAY_S := 0.36               ## scale of the burger art on the plates during play
 ## Art you draw, under res://art/grilling/: name -> [file, placeholder box].
@@ -128,6 +132,10 @@ const POP_COL := Color(1.0, 0.8, 0.2)
 ## Clean answer bars needed in each practice step (claps, then flip).
 @export var practice_goal: int = 2
 @export var practice_metronome_db: float = -8.0
+## A "get ready" bar between the example and your turn, so you're not thrown
+## straight in. It drops once you've done that move cleanly, so you finish
+## practising at song speed (where your turn comes right after the cue).
+@export var practice_count_in: bool = true
 
 @onready var audio: AudioStreamPlayer = $AudioStreamPlayer
 @onready var tongs: AnimatedSprite2D = $Stage/Tongs
@@ -147,14 +155,11 @@ var _cycle_start := -100.0        ## practice: beat the latest call bar starts (
 var _step := 0                     ## practice: 0 = tong claps, 1 = flip
 var _step_ok := 0                  ## practice: clean answer bars in this step
 var _cycles: Array = []            ## practice: { start, cue, cues: [], you: [], strays: [] } per cue+answer pair
-var _card := Card.WELCOME
+var _card := Card.SEASON
 var _card_ms := 0                  ## when the card went up (ignore presses for a moment)
 var _toast := {}                   ## { text, col, ms } -- short message under the rhythm strip
 var banner := ""
 
-var score := 0
-var combo := 0
-var best_combo := 0
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
 var _fx: Array = []                ## { kind, t0, pos } -- steam, pop, miss puff
 var _served: Array = []            ## your finished burgers: { t (song time it landed), landed, raw, season }
@@ -174,7 +179,6 @@ var _stage_home: Vector2
 var _held := false                 ## SPACE / mouse is down
 var _press_ms := -10000            ## last press (the tongs dip)
 var _shake_ms := -10000            ## last good hit (the stage jolts)
-var _combo_ms := -10000            ## combo went up (the counter pulses)
 var _cooked := 0                   ## flips you've landed -> how browned your patty is
 var _raw := 1.0                    ## shown rawness (eases toward the target)
 var _hop := {}                     ## "salt" / "pepper" / "patty" -> ticks ms it last hopped for a cue
@@ -188,12 +192,16 @@ var _knocks := {}                  ## tongs -> { ms, d: screen px from the tips'
 var _tip_home := {}                ## tongs -> where its tips are at rest (screen px)
 var _knock_patty: Sprite2D         ## your patty on its own, shown while your tongs knock
 var _knock_tongs: Sprite2D         ## your bare tongs, which do the knocking
+var _clap_ms := -10000             ## last idle press (the tongs clap)
 var _pop := {}                     ## the patty flying onto the bun: { t0, t1, frame, finish, done, hide_until } (visual times)
 var _pop_back: Sprite2D            ## your tongs without the patty (back arm), while it flies
 var _pop_front: Sprite2D           ## ...and the front arm
 var _pop_patty: Sprite2D           ## the flying patty itself (above the plate)
 var _patty_box := {}               ## flip_patty frame -> where the patty is in that frame (texture px)
-var _fx_layer: Node2D
+var _fx_layer: Node2D               ## plate, shakers, steam, seasoning... (under the tongs)
+var _ui_layer: Node2D               ## judgements, HUD, practice, results (over everything)
+## Effects drawn on the UI layer, over the tongs; everything else in _fx goes under them.
+const UI_FX := ["clack", "x", "judge"]
 var _sfx: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _next_player := 0
@@ -201,9 +209,13 @@ var _panel_sb: StyleBoxFlat
 
 
 func _ready() -> void:
-	_fx_layer = Node2D.new()          # effects + HUD above the grill art
+	_fx_layer = Node2D.new()          # effects above the grill art, under the tongs
 	add_child(_fx_layer)
 	_fx_layer.draw.connect(_draw_fx)
+	_ui_layer = Node2D.new()          # text + HUD above everything, tongs included
+	_ui_layer.z_index = 2
+	add_child(_ui_layer)
+	_ui_layer.draw.connect(_draw_ui)
 	_back_layer = Node2D.new()        # the table goes behind the grill + tongs
 	add_child(_back_layer)
 	move_child(_back_layer, $Stage.get_index())
@@ -220,6 +232,7 @@ func _ready() -> void:
 	for part in ["flip_patty", "tap_tongs"]:
 		_parts[part] = [load("%s%s/%s_00.png" % [PARTS_DIR, part, part])]
 	_tongs_home = tongs.position
+	tongs.z_index = 1                 # your tongs go over the shakers and effects
 	_stage = tongs.get_parent()
 	_stage_home = _stage.position
 	var cook := ShaderMaterial.new()          # your tongs' frames include the patty
@@ -235,11 +248,12 @@ func _ready() -> void:
 		s.position = _tongs_home
 		s.visible = false
 		s.texture = (_parts["flip_patty"] if n == "KnockPatty" else _parts["tap_tongs"])[0]
+		s.z_index = 1
 		_stage.add_child(s)
 		_stage.move_child(s, at)
 		at += 1
+		s.material = cook             # cooking + the outline (the cooking only touches the patty)
 		if n == "KnockPatty":
-			s.material = cook
 			_knock_patty = s
 		else:
 			_knock_tongs = s
@@ -256,6 +270,8 @@ func _ready() -> void:
 		s.name = n
 		s.centered = false
 		s.visible = false
+		s.z_index = 1
+		s.material = cook
 		_stage.add_child(s)
 		_stage.move_child(s, at)
 		at += 1
@@ -331,7 +347,7 @@ func _exit_tree() -> void:
 
 func _restart() -> void:
 	if practice and not _practice_passed:
-		_show_card(Card.WELCOME)
+		_show_card(Card.SEASON)
 	else:
 		_start_song()
 
@@ -350,9 +366,6 @@ func _reset_round() -> void:
 	_finished = false
 	banner = ""
 	_toast = {}
-	score = 0
-	combo = 0
-	best_combo = 0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	_flips.clear()
 	_pflip = {}
@@ -389,12 +402,8 @@ func _advance_card() -> void:
 	if Time.get_ticks_msec() - _card_ms < 500:   # a press left over from the last bar
 		return
 	match _card:
-		Card.WELCOME: _show_card(Card.CLACK)
-		Card.CLACK: _start_practice(0)
+		Card.SEASON: _start_practice(0)
 		Card.FLIP: _start_practice(1)
-		Card.READY:
-			_practice_passed = true
-			_start_song()
 
 
 func _start_practice(step: int) -> void:
@@ -513,7 +522,8 @@ func _schedule_practice() -> void:
 	var cue: String = ["tap", "flip"][_step]
 	var bar := int(_next_cycle / 4.0)
 	var n := (PATTERN[cue] as Array).size()
-	var cyc := {"start": _next_cycle, "cue": cue, "cues": [], "you": [], "strays": [], "taps": []}
+	var gap := 4.0 if practice_count_in and _step_ok == 0 else 0.0   # the count-in bar, in beats
+	var cyc := {"start": _next_cycle, "cue": cue, "cues": [], "you": [], "strays": [], "taps": [], "gap": gap}
 	cyc["cues"].resize(n)
 	cyc["cues"].fill(0)
 	cyc["you"].resize(n)
@@ -523,14 +533,14 @@ func _schedule_practice() -> void:
 		_cycles.pop_front()
 	for off in PATTERN[cue]:
 		var cb: float = _next_cycle + off
-		var ab: float = _next_cycle + 4.0 + off
+		var ab: float = _next_cycle + 4.0 + gap + off
 		_calls.append({"beat": cb, "time": Conductor.time_of_beat(cb), "cue": cue,
 			"part": _part(cue, cb), "sounded": false, "shown": false, "cycle": cyc})
 		_add_answer({"beat": ab, "time": Conductor.time_of_beat(ab), "cue": cue,
-			"part": _part(cue, ab), "bar": bar + 1, "cycle": cyc})
-	_bars[bar + 1] = {"left": n if cue == "tap" else 2, "missed": false}   # a flip grades the press + the release
+			"part": _part(cue, ab), "bar": bar + 1 + int(gap / 4.0), "cycle": cyc})
+	_bars[bar + 1 + int(gap / 4.0)] = {"left": n if cue == "tap" else 2, "missed": false}   # a flip grades the press + the release
 	_cycle_start = _next_cycle
-	_next_cycle += 8.0
+	_next_cycle += 8.0 + gap
 
 
 ## One press of a practice answer bar has been graded.
@@ -552,13 +562,18 @@ func _judge_bars() -> void:
 			continue
 		_bars.erase(bar)
 		if b["missed"]:
-			_say("Not quite -- listen to the cue and try again!", Color(0.85, 0.25, 0.2))
+			# only if the miss didn't already say what went wrong
+			if Time.get_ticks_msec() - int(_toast.get("ms", -100000)) > 1500:
+				_say("Not quite -- listen to the cue and try again!", Color(0.85, 0.25, 0.2))
 			continue
 		_step_ok += 1
 		if _step_ok < practice_goal:
-			_say("Nice! Do it once more.", Color(0.25, 0.55, 0.25))
 			continue
-		_show_card(Card.FLIP if _step == 0 else Card.READY)
+		if _step == 0:
+			_show_card(Card.FLIP)
+		else:   # both moves done: straight into the song
+			_practice_passed = true
+			_start_song()
 		return
 
 
@@ -570,7 +585,7 @@ func _say(text: String, col: Color) -> void:
 func _current_cycle() -> Variant:
 	var b := Conductor.visual_position / Conductor.seconds_per_beat
 	for c in _cycles:
-		if b >= c["start"] and b < c["start"] + 8.0:
+		if b >= c["start"] and b < c["start"] + 8.0 + c["gap"]:
 			return c
 	return null
 
@@ -609,6 +624,7 @@ func _process(_dt: float) -> void:
 		_grade(a, "Miss")
 	_fx = _fx.filter(func(f): return now - f["t0"] >= -0.05 and now - f["t0"] < 1.2)
 	_fx_layer.queue_redraw()
+	_ui_layer.queue_redraw()
 	_back_layer.queue_redraw()
 
 
@@ -664,6 +680,17 @@ func _drive_feel(dt: float) -> void:
 	_knock_tongs.visible = split
 	_knock_tongs.position = _tongs_home + knock + (dip_off if split else Vector2.ZERO)
 	_knock_patty.position = _tongs_home + hop
+	# an idle clap: play the "tap" frames (shut on frame 3, open again by 5)
+	var clap := (ms - _clap_ms) / CLAP_MS
+	if clap >= 0.0 and clap < 1.0 and not split and not _flips.has(tongs) and _fumble.is_empty():
+		if tongs.animation != &"tap":
+			tongs.animation = &"tap"
+		tongs.stop()
+		tongs.frame = mini(5, int(clap * 6.0))
+	elif tongs.animation == &"tap":
+		tongs.animation = &"flip"
+		tongs.stop()
+		tongs.frame = 0
 	var sk := 1.0 - clampf((ms - _shake_ms) / 160.0, 0.0, 1.0)
 	_stage.position = _stage_home + Vector2(sin(ms * 0.09) * 4.0, cos(ms * 0.11) * 3.0) * sk
 	var k := 1.0 - exp(-dt * 5.0)
@@ -818,7 +845,10 @@ func _press() -> void:
 			return
 	if _phase == Phase.PRACTICE:
 		_stray_press()
-	# nothing to answer -- the tongs just dip (the sound always plays, even when spamming)
+	# nothing to answer -- the tongs clap together (the sound always plays, even when spamming)
+	if not _flips.has(tongs) and _fumble.is_empty():
+		_press_ms = -10000            # a clap, not the dip
+		_clap_ms = Time.get_ticks_msec()
 	_sound("tap", 0)
 
 
@@ -846,9 +876,7 @@ func _release() -> void:
 ## A press or release that landed in the window.
 func _hit(c: Dictionary, err: float) -> void:
 	if c.has("cycle"):   # practice: show where it landed, and if it was off
-		c["cycle"]["taps"].append(c["beat"] - c["cycle"]["start"] - 4.0 + err / Conductor.seconds_per_beat)
-		if absf(err) > PERFECT:
-			_say("A little early!" if err < 0.0 else "A little late!", Color(0.7, 0.45, 0.0))
+		c["cycle"]["taps"].append(c["beat"] - c["cycle"]["start"] - 4.0 - c["cycle"]["gap"] + err / Conductor.seconds_per_beat)
 	_grade(c, "Perfect" if absf(err) <= PERFECT else "Good")
 
 
@@ -857,13 +885,12 @@ func _hit(c: Dictionary, err: float) -> void:
 func _stray_press() -> void:
 	var cyc: Variant = _current_cycle()
 	if cyc == null:
-		_say("Wait -- that was the cue! Answer it next bar.", Color(0.25, 0.4, 0.75))
 		return
 	var b: float = (Conductor.live_position() - Conductor.input_offset - Conductor.first_beat_offset) \
 		/ Conductor.seconds_per_beat - cyc["start"]
-	if b < 4.0:
-		_say("Wait -- that was the cue! Answer it next bar.", Color(0.25, 0.4, 0.75))
+	if b < 4.0 + cyc["gap"]:   # during the cue or the count-in: harmless
 		return
+	b -= cyc["gap"]
 	if b >= 8.0:
 		return
 	cyc["strays"].append(b - 4.0)
@@ -886,13 +913,6 @@ func _grade(c: Dictionary, grade: String) -> void:
 		c["cycle"]["you"][c["part"]] = 2 if grade == "Miss" else 1
 	if _phase == Phase.SONG:
 		_tally[grade] += 1
-		if grade == "Miss":
-			combo = 0
-		else:
-			combo += 1
-			_combo_ms = Time.get_ticks_msec()
-			best_combo = maxi(best_combo, combo)
-			score += 100 if grade == "Perfect" else 50
 	var now := Conductor.song_position
 	var col: Color = {"Perfect": PERFECT_COL, "Good": GOOD_COL, "Miss": MISS_COL}[grade]
 	_fx.append({"kind": "judge", "t0": now, "pos": you_pos + Vector2(0, -70), "text": grade.to_upper() + ("!" if grade == "Perfect" else ""), "col": col})
@@ -1015,7 +1035,6 @@ func _act(cue: String, part: int, beat: float) -> void:
 			else:                                       # beat 3: lands with a sizzle, a bit more done
 				_fx.append({"kind": "steam", "t0": t, "pos": patty_pos})
 				_fx.append({"kind": "sparks", "t0": t, "pos": patty_pos + Vector2(0, 10), "seed": randi(), "n": 12})
-
 
 
 ## How far a knock has a set of tongs moved right now (Stage px; zero when not knocking).
@@ -1206,9 +1225,25 @@ func _draw_fx() -> void:
 	_draw_plate(l)
 	for season in SEASONS:
 		_draw_shaker(l, season)
+	_draw_fx_items(l, font, now, false)
+
+
+## Text, judgements, the HUD, practice strip, cards and results: over everything.
+func _draw_ui() -> void:
+	var now := Conductor.song_position
+	var font := ThemeDB.fallback_font
+	var l := _ui_layer
 	if _flip_due != "" and _fumble.is_empty() and not _flips.has(tongs):
 		_draw_flip_due(l, font)
+	_draw_fx_items(l, font, now, true)
+	_draw_hud_and_panels(l, font)
+
+
+## The effects in _fx: the UI_FX ones when `ui`, the rest otherwise.
+func _draw_fx_items(l: Node2D, font: Font, now: float, ui: bool) -> void:
 	for f in _fx:
+		if (f["kind"] in UI_FX) != ui:
+			continue
 		var t: float = maxf(now - f["t0"], 0.0)
 		var pos: Vector2 = f["pos"]
 		match f["kind"]:
@@ -1294,22 +1329,17 @@ func _draw_fx() -> void:
 					if a > 0.0:
 						l.draw_line(p, p - v.normalized() * 10.0, Color(1, 0.6 + rng.randf() * 0.3, 0.15, a), 4.0)
 
+
+func _draw_hud_and_panels(l: Node2D, font: Font) -> void:
 	if _closeup_ms >= 0 and Time.get_ticks_msec() >= _closeup_ms:
 		_draw_closeup(l, font)
 		return
 	if _phase == Phase.SONG:
-		# a light outline keeps the HUD readable where it sits over the grill lid
-		l.draw_string_outline(font, Vector2(VP.x - 250, 52), "SCORE  %d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, 8, HUD_EDGE)
-		l.draw_string(font, Vector2(VP.x - 250, 52), "SCORE  %d" % score, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, INK)
-		var pulse := 1.0 + 0.35 * clampf(1.0 - (Time.get_ticks_msec() - _combo_ms) / 180.0, 0.0, 1.0)
-		var ccol := INK.lerp(PERFECT_COL.darkened(0.2), clampf(combo / 10.0, 0.0, 1.0))
-		l.draw_set_transform(Vector2(VP.x - 250, 80), 0.0, Vector2(pulse, pulse))
-		l.draw_string_outline(font, Vector2(0, 8), "COMBO  x%d" % combo, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, 8, HUD_EDGE)
-		l.draw_string(font, Vector2(0, 8), "COMBO  x%d" % combo, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, ccol)
-		l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# no points: just which burger you're on (a light outline keeps it
+		# readable where it sits over the grill lid)
 		var bt := "BURGER  %d / %d" % [mini(_served.size() + 1, _burger_count), _burger_count]
-		l.draw_string_outline(font, Vector2(VP.x - 250, 122), bt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 8, HUD_EDGE)
-		l.draw_string(font, Vector2(VP.x - 250, 122), bt, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, INK)
+		l.draw_string_outline(font, Vector2(VP.x - 250, 52), bt, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, 8, HUD_EDGE)
+		l.draw_string(font, Vector2(VP.x - 250, 52), bt, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, INK)
 	else:
 		_draw_practice(l, font)
 	if _held and _pflip.get("hit", 0) == 1 and not _pflip.get("fail", true):
@@ -1388,73 +1418,74 @@ func _draw_hold_ring(l: Node2D, font: Font) -> void:
 	l.draw_string(font, c + Vector2(-60, 8), "HOLD", HORIZONTAL_ALIGNMENT_CENTER, 120, 18, INK)
 
 
-## Where a cue happens: over the shakers (seasoning) or the patty (flip).
-func _cue_spot(cue: String) -> Vector2:
-	if cue == "tap":
-		return (salt_pos + pepper_pos) * 0.5 + Vector2(0, -50)
-	return patty_pos + Vector2(0, -60)
-
-
 func _draw_practice(l: Node2D, font: Font) -> void:
 	if _phase == Phase.CARD:
 		_draw_card(l, font)
 		return
-	var cyc: Variant = _current_cycle()
 	var b := Conductor.visual_position / Conductor.seconds_per_beat
-	var cue_col := Color(1.0, 0.6, 0.2)
-	var you_col := Color(1, 0.88, 0.3)
-	var strip := Rect2(VP.x * 0.5 - 230, 10, 460, 128)
 	var cue: String = ["tap", "flip"][_step]
+	var strip := Rect2(VP.x * 0.5 - 270, 10, 540, 128)
+	# The strip moves on to the next bar STRIP_LEAD beats early, so you watch the
+	# playhead come in through the lead-in ("4 &") and land on beat 1.
+	var bs := b + STRIP_LEAD
+	var cyc: Variant = null
+	for c in _cycles:
+		if bs >= c["start"] and bs < c["start"] + 8.0 + c["gap"]:
+			cyc = c
 	if cyc == null:
-		_draw_strip(l, font, strip, cue, [], fposmod(b, 4.0), [], "Get ready...", INK, INK)
-	elif b < cyc["start"] + 4.0:
-		_label(l, font, _cue_spot(cue), "LISTEN", cue_col)
+		_draw_strip(l, font, strip, cue, [], b - 4.0 * ceilf(b / 4.0), [], "Get ready", INK, INK)
+	elif bs < cyc["start"] + 4.0:
 		_draw_strip(l, font, strip, cue, cyc["cues"], b - cyc["start"], [],
-			"The cue -- watch & listen", Color(0.75, 0.4, 0.1), cue_col)
+			"Listen", Color(0.75, 0.4, 0.1), Color(1.0, 0.6, 0.2))
+	elif bs < cyc["start"] + 4.0 + cyc["gap"]:
+		_draw_strip(l, font, strip, cue, [], b - cyc["start"] - 4.0, [],
+			"Get ready", Color(0.25, 0.4, 0.75), Color(1, 0.88, 0.3))
 	else:
-		_label(l, font, you_pos, "YOUR TURN!", you_col)
-		_draw_strip(l, font, strip, cue, cyc["you"], b - cyc["start"] - 4.0, cyc["strays"],
-			"Your turn -- same rhythm with SPACE!", Color(0.7, 0.45, 0.0), Color(0.36, 0.62, 0.32), cyc["taps"])
-
-	if not _toast.is_empty():
-		var age := (Time.get_ticks_msec() - int(_toast["ms"])) / 1000.0
-		if age < 1.8:
-			var a := clampf((1.8 - age) / 0.4, 0.0, 1.0)
-			var col: Color = _toast["col"]
-			var at := Vector2(0, strip.end.y + 34)
-			l.draw_string_outline(font, at, _toast["text"], HORIZONTAL_ALIGNMENT_CENTER, VP.x, 26, 8, Color(1, 1, 1, a))
-			l.draw_string(font, at, _toast["text"], HORIZONTAL_ALIGNMENT_CENTER, VP.x, 26, Color(col, a))
-
-	var box := Rect2(VP.x - 330, VP.y - 132, 310, 112)   # bottom-right: clear of the grill and both tongs
-	var x := box.position.x
-	var y := box.position.y
-	var w := box.size.x
-	l.draw_style_box(_panel_sb, box)
-	var step_text := "Practice 1/2: Seasoning" if _step == 0 else "Practice 2/2: The flip"
-	l.draw_string(font, Vector2(x, y + 34), step_text, HORIZONTAL_ALIGNMENT_CENTER, w, 22, INK)
-	var gap := 40.0
-	var cx := x + w * 0.5 - gap * (practice_goal - 1) * 0.5
+		_draw_strip(l, font, strip, cue, cyc["you"], b - cyc["start"] - 4.0 - cyc["gap"], cyc["strays"],
+			"Your turn!", Color(0.7, 0.45, 0.0), Color(0.36, 0.62, 0.32), cyc["taps"])
+	# the count-in: a big 4, 3, 2, 1 over your tongs, popping on each beat
+	var real: Variant = _current_cycle()
+	if real != null and b >= real["start"] + 4.0 and b < real["start"] + 4.0 + real["gap"]:
+		var into: float = b - real["start"] - 4.0
+		var pulse := 1.0 + 0.35 * exp(-fposmod(into, 1.0) * 8.0)
+		l.draw_set_transform(you_pos + Vector2(0, -90), 0.0, Vector2(pulse, pulse))
+		l.draw_string_outline(font, Vector2(-60, 24), str(4 - int(into)), HORIZONTAL_ALIGNMENT_CENTER, 120, 72, 12, INK)
+		l.draw_string(font, Vector2(-60, 24), str(4 - int(into)), HORIZONTAL_ALIGNMENT_CENTER, 120, 72, Color(1, 0.88, 0.3))
+		l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# clean tries so far: small dots in the strip's top-right corner
 	for i in practice_goal:
-		var c := Vector2(cx + gap * i, y + 62)
+		var c := Vector2(strip.end.x - 22 - 24 * (practice_goal - 1 - i), strip.position.y + 24)
 		if i < _step_ok:
-			l.draw_circle(c, 13.0, Color(0.36, 0.62, 0.32))
+			l.draw_circle(c, 8.0, Color(0.36, 0.62, 0.32))
 		else:
-			l.draw_arc(c, 13.0, 0.0, TAU, 32, Color(INK, 0.45), 3.0)
-	l.draw_string(font, Vector2(x, y + 98), "S to skip the practice", HORIZONTAL_ALIGNMENT_CENTER, w, 16, Color(INK, 0.6))
+			l.draw_arc(c, 8.0, 0.0, TAU, 24, Color(INK, 0.4), 2.5)
+	l.draw_string(font, Vector2(VP.x - 120, VP.y - 8), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 110, 14, Color(INK, 0.45))
 
 
-## One bar as a timeline: beats 1-4 with "&"s, a circle for each press of
-## `cue`, filled as `marks` says (0 empty, 1 hit, 2 missed), red ticks for extra
-## presses, a small marker where each counted press landed, and a playhead at `head` beats into the bar (< 0 or > 4: none).
+## One bar as a timeline: a faded lead-in ("4 &" of the bar before, STRIP_LEAD
+## beats), then beats 1-4 with "&"s. A circle for each press of `cue`, filled as
+## `marks` says (0 empty, 1 hit, 2 missed), red X for extra presses, a tick where
+## each counted press landed, and a playhead at `head` beats into the bar (it
+## shows from -STRIP_LEAD, so you see it coming into beat 1).
 func _draw_strip(l: Node2D, font: Font, r: Rect2, cue: String, marks: Array, head: float,
 		strays: Array, title: String, title_col: Color, fill: Color, taps: Array = []) -> void:
 	l.draw_style_box(_panel_sb, r)
 	l.draw_string(font, Vector2(r.position.x, r.position.y + 32), title, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 24, title_col)
-	var x0 := r.position.x + 50
-	var sp := (r.size.x - 100) / 3.5
+	var x0 := r.position.x + 40
+	var sp := (r.size.x - 80) / (3.5 + STRIP_LEAD)
 	var ly := r.position.y + 76
-	var bx := func(beat: float) -> float: return x0 + beat * sp
-	l.draw_line(Vector2(x0 - 20, ly), Vector2(bx.call(3.5) + 20, ly), Color(INK, 0.35), 3.0)
+	var bx := func(beat: float) -> float: return x0 + (beat + STRIP_LEAD) * sp
+	# the lead-in: the end of the bar before, faded
+	l.draw_line(Vector2(bx.call(-STRIP_LEAD) - 10, ly), Vector2(bx.call(0.0), ly), Color(INK, 0.15), 3.0)
+	l.draw_line(Vector2(bx.call(0.0), ly), Vector2(bx.call(3.5) + 20, ly), Color(INK, 0.35), 3.0)
+	var lb := -STRIP_LEAD
+	while lb < 0.0:
+		var whole := is_equal_approx(fposmod(lb, 1.0), 0.0)
+		var txt := str(int(4.0 + lb) + 1) if whole else "&"
+		l.draw_string(font, Vector2(bx.call(lb) - 30, ly - 18), txt, HORIZONTAL_ALIGNMENT_CENTER, 60, 18 if whole else 14, Color(INK, 0.3))
+		if whole:
+			l.draw_line(Vector2(bx.call(lb), ly - 6), Vector2(bx.call(lb), ly + 6), Color(INK, 0.25), 2.0)
+		lb += 0.5
 	for i in 4:
 		l.draw_string(font, Vector2(bx.call(i) - 30, ly - 18), str(i + 1), HORIZONTAL_ALIGNMENT_CENTER, 60, 22, Color(INK, 0.8))
 		l.draw_line(Vector2(bx.call(i), ly - 8), Vector2(bx.call(i), ly + 8), Color(INK, 0.5), 3.0)
@@ -1481,14 +1512,28 @@ func _draw_strip(l: Node2D, font: Font, r: Rect2, cue: String, marks: Array, hea
 			l.draw_circle(c, rad, Color(1, 0.97, 0.88))
 		l.draw_arc(c, rad, 0.0, TAU, 32, INK, 3.0)
 		l.draw_string(font, Vector2(c.x - 40, ly + 38), words[i], HORIZONTAL_ALIGNMENT_CENTER, 80, 16, Color(INK, 0.75))
-	for s in strays:
-		_draw_x(l, Vector2(bx.call(s), ly), 9.0, Color(0.85, 0.2, 0.15), 4.0)
+	for st in strays:
+		_draw_x(l, Vector2(bx.call(st), ly), 9.0, Color(0.85, 0.2, 0.15), 4.0)
 	for tp in taps:      # where each counted press actually landed (on the circle = perfect)
 		var tx: float = bx.call(tp)
 		l.draw_line(Vector2(tx, ly - 19), Vector2(tx, ly + 19), INK, 4.0)
-	if head >= -0.25 and head < 3.75:
-		var hx: float = bx.call(clampf(head, 0.0, 3.75))
+	if head >= -STRIP_LEAD and head < 3.75:
+		var hx: float = bx.call(head)
 		l.draw_line(Vector2(hx, ly - 26), Vector2(hx, ly + 22), Color(0.85, 0.3, 0.2, 0.8), 4.0)
+
+
+## A slim bar along the bottom of the screen with one line of text (and an
+## optional bold `title` above it). Returns the bar's rect.
+func _caption(l: Node2D, font: Font, text: String, title := "") -> Rect2:
+	var h := 58.0 if title == "" else 96.0
+	var r := Rect2(VP.x * 0.5 - 380, VP.y - h - 18, 760, h)
+	l.draw_style_box(_panel_sb, r)
+	var y := r.position.y + 37.0
+	if title != "":
+		l.draw_string(font, Vector2(r.position.x, y), title, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 30, INK)
+		y += 38.0
+	l.draw_string(font, Vector2(r.position.x, y), text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 22, Color(0.6, 0.32, 0.08))
+	return r
 
 
 func _draw_x(l: Node2D, c: Vector2, s: float, col: Color, w: float) -> void:
@@ -1498,67 +1543,16 @@ func _draw_x(l: Node2D, c: Vector2, s: float, col: Color, w: float) -> void:
 
 ## The tutorial's explainer cards.
 func _draw_card(l: Node2D, font: Font) -> void:
-	l.draw_rect(Rect2(Vector2.ZERO, VP), Color(0, 0, 0, 0.35))
-	var cue_col := Color(1.0, 0.6, 0.2)
-	var you_col := Color(1, 0.88, 0.3)
-	var box := Rect2(140, 286, VP.x - 280, 350)
-	var x := box.position.x
-	var w := box.size.x
-	var y := box.position.y
-	var lines: Array = []          # [text, size, color]
-	var strip_cue := ""
+	# one short title + one line over the scene; SPACE to start trying it
+	l.draw_rect(Rect2(Vector2.ZERO, VP), Color(0, 0, 0, 0.18))
+	var r: Rect2
 	match _card:
-		Card.WELCOME:
-			_label(l, font, you_pos, "YOU", you_col)
-			_label(l, font, patty_pos + Vector2(0, -60), "THE GRILL", cue_col)
-			lines = [["HOW TO PLAY", 34, INK],
-				["The tongs are YOURS.", 24, Color(0.6, 0.4, 0.0)],
-				["The grill tells you what it needs, one bar ahead:", 22, INK],
-				["shakers hop = season it.  Patty sizzles = flip it!", 22, Color(0.75, 0.4, 0.1)],
-				["", 10, INK],
-				["Listen to the cue's rhythm, then press SPACE", 22, INK],
-				["in that same rhythm on the next bar.", 22, INK]]
-		Card.CLACK:
-			lines = [["MOVE 1:  SEASON IT", 34, INK],
-				["Salt and pepper hop on \"3-and-4\"? Next bar, shake them", 22, INK],
-				["in that rhythm: SALT, then PEPPER. Miss = on the floor!", 22, INK]]
-			strip_cue = "tap"
+		Card.SEASON:
+			r = _caption(l, font, "Shakers hop?  Shake back:  salt, pepper.", "Season it!")
 		Card.FLIP:
-			lines = [["MOVE 2:  THE FLIP", 34, INK],
-				["Small sizzle, BIG sizzle? It's ready! Next bar,", 22, INK],
-				["HOLD SPACE on 1 to grab it, LET GO on 2 to toss it.", 22, INK]]
-			strip_cue = "flip"
-		Card.READY:
-			lines = [["YOU'VE GOT IT!", 34, Color(0.25, 0.55, 0.25)],
-				["Now the real song -- cook THREE burgers!", 22, INK],
-				["Listen for the cue, answer it on the next bar.", 22, INK],
-				["", 10, INK],
-				["Shakers hop?  Salt, then pepper.", 22, INK],
-				["Sizzle, SIZZLE?  HOLD on 1, let go on 2.", 22, INK],
-				["Pop, pop = it goes on the bun -- next burger!", 22, Color(0.75, 0.25, 0.2)]]
-	l.draw_style_box(_panel_sb, box)
-	var ty := y + 50.0
-	for ln in lines:
-		l.draw_string(font, Vector2(x, ty), ln[0], HORIZONTAL_ALIGNMENT_CENTER, w, ln[1], ln[2])
-		ty += ln[1] + 12.0
-	if strip_cue != "":
-		# animate a playhead across a sample bar, the circles filling as it passes
-		var t := fposmod(Time.get_ticks_msec() / 1000.0 / Conductor.seconds_per_beat, 6.0) - 1.0
-		var marks: Array = []
-		for p in PATTERN[strip_cue]:
-			marks.append(1 if t >= p else 0)
-		_draw_strip(l, font, Rect2(x + w * 0.5 - 230, ty - 6, 460, 128), strip_cue, marks, t, [],
-			"Where the presses go:", INK, Color(0.36, 0.62, 0.32))
-	var blink := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 250.0)
-	l.draw_string(font, Vector2(x, box.end.y - 18), "Press SPACE to continue", HORIZONTAL_ALIGNMENT_CENTER, w, 20, Color(INK, blink))
-
-
-## Outlined label with a down arrow whose tip is at `tip`.
-func _label(l: Node2D, font: Font, tip: Vector2, text: String, col: Color) -> void:
-	var at := Vector2(tip.x - 170, tip.y - 40)
-	l.draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_CENTER, 340, 40, 8, Color(0.15, 0.1, 0.08, col.a))
-	l.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_CENTER, 340, 40, col)
-	l.draw_colored_polygon(PackedVector2Array([tip + Vector2(-13, -30), tip + Vector2(13, -30), tip]), col)
+			r = _caption(l, font, "Small sizzle, BIG sizzle?  HOLD on 1, let go on 2.", "Flip it!")
+	var blink := 0.55 + 0.45 * sin(Time.get_ticks_msec() / 250.0)
+	l.draw_string(font, Vector2(r.end.x - 130, r.end.y - 12), "SPACE", HORIZONTAL_ALIGNMENT_RIGHT, 116, 16, Color(INK, blink))
 
 
 ## The ending: zoom into your bun, then a close-up of all your burgers in a row --
@@ -1785,7 +1779,7 @@ func _grain(l: Node2D, p: Vector2, season: String, alpha: float) -> void:
 
 
 func _draw_results(l: Node2D, font: Font, at: Vector2) -> void:
-	var box := Rect2(at, Vector2(400, 370))
+	var box := Rect2(at, Vector2(400, 400))
 	l.draw_rect(box, Color(0.12, 0.08, 0.06, 0.82))
 	var x := box.position.x + 32
 	var y := box.position.y + 54
@@ -1797,8 +1791,7 @@ func _draw_results(l: Node2D, font: Font, at: Vector2) -> void:
 		var r: Dictionary = _served[i]
 		l.draw_string(font, Vector2(x, y + 106 + i * 26), "Burger %d   %s" % [i + 1, _doneness(r["raw"]) if r["landed"] else "-- dropped"],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1.0, 0.7, 0.55))
+	# no points: how many of the song's presses you got, and that as a percent
 	var ty := y + 106 + _served.size() * 26 + 12
-	l.draw_string(font, Vector2(x, ty), "Perfect %d   Good %d   Miss %d" % [_tally["Perfect"], _tally["Good"], _tally["Miss"]],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.85, 0.85, 0.8))
-	l.draw_string(font, Vector2(x, ty + 38), "Score %d   Best x%d" % [score, best_combo], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
-	l.draw_string(font, Vector2(x, ty + 72), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.8, 0.8, 0.8))
+	Results.draw(l, font, Vector2(x, ty + 4), _tally["Perfect"] + _tally["Good"], _answers.size(), Color.WHITE)
+	l.draw_string(font, Vector2(x, ty + 102), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.8, 0.8, 0.8))
