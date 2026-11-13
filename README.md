@@ -19,13 +19,13 @@ A hand-drawn, Rhythm Heaven–style collection of rhythm minigames, made in Godo
 | ![Monkey Business](docs/screenshots/monkey-business.png) | **Monkey Business.** A monkey hip-bumps the palm tree and coconuts fall. Listen for the cue sound, then catch each one right on the beat. Starts with a short practice round. |
 | ![Grill Master](docs/screenshots/grill-master.png) | **Grill Master.** Call and response at the barbecue. The salt and pepper shakers hop when the patty needs seasoning, and the patty bubbles with a ding-ding when it's ready to flip. Answer on the next bar in the same rhythm: tap to season, and **hold** to flip (press on beat 1 to grab, let go on beat 2 to toss). Cook three burgers onto the picnic table per song. Starts with a short tutorial. *(Work in progress.)* |
 | **Wizard Tower** | **Wizard Tower.** The enemy tower fires a bar of fire and ice balls into the sky, and one bar later they rain down on you in the same rhythm. Blast each one with the opposite element: **A** = ice, **D** = fire. *(Prototype.)* |
-| **Boomerang** | **Boomerang.** The thrower calls it twice ("cue, cue, THROW"), you throw on the beat, and it counts as it flies: catch it right after "1 2 3", "1 & 2 & 3 &" or "1 2 3 4". Each boomerang colour has its own cue noise. Clean throws pop balloons along the way. *(Prototype, placeholder art.)* |
+| **Juggling** | **Juggling.** Keep the juggle going: every press is a catch (one hand catches while the other throws). The juggler shows each act's rhythm first, then you take over; a whistle marks the last bar. Three acts, each with a slightly different rhythm: tennis balls in the backyard, bowling pins on a unicycle, flaming swords on a trapeze over a shark tank. *(Prototype, placeholder art and song.)* |
 
 ## Controls
 
 | Key | Action |
 |---|---|
-| **Space** / left click | Catch a coconut / answer on the grill (hold to flip) / throw and catch the boomerang |
+| **Space** / left click | Catch a coconut / answer on the grill (hold to flip) / catch and toss while juggling |
 | **A** / **D** | Ice / fire spell in Wizard Tower (or left / right click) |
 | **S** | Skip the practice round |
 | **R** | Restart the level |
@@ -59,7 +59,7 @@ Rhythm.tscn          Monkey Business
 Grill.tscn           Grill Master
 GrillTest.tscn       One-Burger Test (a stripped-down grill experiment)
 Wizard.tscn          Wizard Tower
-Boomerang.tscn       Boomerang
+Juggle.tscn          Juggling
 scripts/             game code (GDScript)
 beatmaps/            level charts: which beat each coconut lands on
 art/                 drawings (PNG) and their Krita source files (.kra)

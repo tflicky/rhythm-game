@@ -161,6 +161,8 @@ var _toast := {}                   ## { text, col, ms } -- short message under t
 var banner := ""
 
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
+var _results: Results          ## the counting-up percent on the results screen
+var _answer_total := 0             ## presses the song asks for, counted when it starts
 var _fx: Array = []                ## { kind, t0, pos } -- steam, pop, miss puff
 var _served: Array = []            ## your finished burgers: { t (song time it landed), landed, raw, season }
 var _burger_count := 1             ## burgers in the song (one per pop you answer)
@@ -208,7 +210,12 @@ var _next_player := 0
 var _panel_sb: StyleBoxFlat
 
 
+var _pause: PauseMenu
+
 func _ready() -> void:
+	_pause = PauseMenu.attach(self, _restart)   # Esc: Continue / Retry / Quit
+	_results = Results.new()
+	add_child(_results)
 	_fx_layer = Node2D.new()          # effects above the grill art, under the tongs
 	add_child(_fx_layer)
 	_fx_layer.draw.connect(_draw_fx)
@@ -367,6 +374,8 @@ func _reset_round() -> void:
 	banner = ""
 	_toast = {}
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
+	if _results:
+		_results.reset()
 	_flips.clear()
 	_pflip = {}
 	_fumble = {}
@@ -450,6 +459,7 @@ func _start_song() -> void:
 		else:
 			_add_answer(cue)
 	_burger_count = maxi(1, pops)
+	_answer_total = _answers.size()   # every press the song asks for (the list empties as you play)
 	Conductor.play()
 
 
@@ -828,7 +838,11 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_R:
 				_restart()
 			KEY_ESCAPE:
-				get_tree().change_scene_to_file("res://MainMenu.tscn")
+				if _finished:               # results screen: straight to the menu
+					get_tree().change_scene_to_file("res://MainMenu.tscn")
+				else:
+					_pause.open()
+				get_viewport().set_input_as_handled()
 
 
 func _press() -> void:
@@ -1779,19 +1793,8 @@ func _grain(l: Node2D, p: Vector2, season: String, alpha: float) -> void:
 
 
 func _draw_results(l: Node2D, font: Font, at: Vector2) -> void:
-	var box := Rect2(at, Vector2(400, 400))
+	# just the percent of the song's presses you got
+	var box := Rect2(at + Vector2(0, 90), Vector2(400, 220))
 	l.draw_rect(box, Color(0.12, 0.08, 0.06, 0.82))
-	var x := box.position.x + 32
-	var y := box.position.y + 54
-	var perfect := _served.filter(_perfect).size()
-	l.draw_string(font, Vector2(x, y), "RESULTS", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color.WHITE)
-	l.draw_string(font, Vector2(x, y + 44), "Perfect burgers  %d / %d" % [perfect, _burger_count], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, PERFECT_COL)
-	l.draw_string(font, Vector2(x, y + 76), "Seasoned  %d / %d" % [_seasoned_all, _season_total], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.6, 0.9, 0.45))
-	for i in _served.size():
-		var r: Dictionary = _served[i]
-		l.draw_string(font, Vector2(x, y + 106 + i * 26), "Burger %d   %s" % [i + 1, _doneness(r["raw"]) if r["landed"] else "-- dropped"],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1.0, 0.7, 0.55))
-	# no points: how many of the song's presses you got, and that as a percent
-	var ty := y + 106 + _served.size() * 26 + 12
-	Results.draw(l, font, Vector2(x, ty + 4), _tally["Perfect"] + _tally["Good"], _answers.size(), Color.WHITE)
-	l.draw_string(font, Vector2(x, ty + 102), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.8, 0.8, 0.8))
+	_results.draw_percent(l, font, box.get_center() + Vector2(0, -10), _tally["Perfect"] + _tally["Good"], _answer_total)
+	l.draw_string(font, Vector2(box.position.x, box.end.y - 18), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))

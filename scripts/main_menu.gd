@@ -25,7 +25,7 @@ const LEVELS := [
 			# just the gnome
 			{"tex": "res://art/wizard/icon.png", "pos": Vector2(-10, -12), "size": Vector2(126, 126)},
 		]},
-	{"title": "Boomerang", "scene": "res://Boomerang.tscn",
+	{"title": "Juggling", "scene": "res://Juggle.tscn",
 		"color": Color(0.8, 0.36, 0.3)},
 ]
 

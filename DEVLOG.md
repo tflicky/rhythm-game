@@ -295,3 +295,41 @@ between. One shared file, `scripts/results.gd`, draws it for every level.
 **Menu icons:** Monkey Business is just the banana now; Wizard is just the gnome
 (the icon script got reframed so the gnome fills it). Got there after a couple of
 tries: fireball only, then gnome + fireball, then gnome only.
+
+## Results that count up, a pause menu, and Boomerang becomes Juggling (Nov 13, later)
+
+**Bug: the grill said 0%.** *"it says i got 0% for the burger one when i def didnt
+26/0"*. The grill counted its total presses from the list of presses still waiting,
+but by the end of the song that list is empty (every press gets taken off it as you
+play), so it divided by zero. Now the total is counted when the song starts.
+
+**Results are just the percent, and it performs.** *"the only stats that should be
+there should be the percent sign for all of the games, and it should start from 0
+and like count up incremently pretty fast then near the end it slows down then when
+its done counting it waits a half beat then the number moves towards the player and
+slams back down"*. Every level now counts 0 → your percent (fast, then easing in,
+colour going red → green as it climbs) over a drum roll, then half a beat later it
+swells toward you and slams down with a squash and a shake. The drum roll is a slot
+for my own recording (`audio/sfx/drum_roll.wav`); a synth roll stands in for now.
+
+**Pause menu.** *"when you click escape in the level it shouldnt automatically boot
+you out, it should bring up a menu that asks if you want to continue, retry, or
+quit, then count in for when you press continue"*. Esc now freezes the level and
+the music: Continue / Retry / Quit. Continue counts 3, 2, 1 lined up with exactly
+where the music stopped, so the song comes back right on the beat (tested: within
+5 ms). Esc on the results screen still goes straight to the menu.
+
+**Boomerang is gone; Juggling replaces it.** *"starts out juggling tennis balls in a
+backyard then pauses a third of the way through then the character is doing it on a
+unicycle with bowling pins, then for the last segment hes doing it on a trapeeze over
+a shark tank"*, and for the last act, *"I want it to be flaming swords"*.
+My design calls:
+- *"one click for both, one hand is catching and the other is throwing so it should
+  be a game where you are holding a beat throughout the song"*, with the rhythm
+  *"slightly faster or just changes the beat slightly"* each act.
+- The call is *"when the beat starts for the first time, then a call for when it
+  stops"*: the juggler shows each act's rhythm for a bar ("hup" per catch), and a
+  whistle on the last bar's downbeat says finish this bar and stop.
+- A curtain closes and opens between acts. Rhythms to start: 1 2 3 4 / 1 2 3 & 4 /
+  1 2 & 3 4 &.
+- Placeholder art and the monkey song for now; my own song and drawings come next.

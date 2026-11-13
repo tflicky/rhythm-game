@@ -39,7 +39,10 @@ var _song_stream: AudioStream
 var _metronome: AudioStreamWAV
 
 
+var _pause: PauseMenu
+
 func _ready() -> void:
+	_pause = PauseMenu.attach(self, _restart)   # Esc: Continue / Retry / Quit
 	Conductor.stream_player = audio
 	_song_stream = audio.stream
 
@@ -166,7 +169,11 @@ func _unhandled_input(e: InputEvent) -> void:
 				_practice_passed = true
 				_start_song()
 		KEY_ESCAPE:
-			get_tree().change_scene_to_file("res://MainMenu.tscn")
+			if game._finished:          # results screen: straight to the menu
+				get_tree().change_scene_to_file("res://MainMenu.tscn")
+			else:
+				_pause.open()
+			get_viewport().set_input_as_handled()
 		KEY_F2:
 			mode = Mode.RECORD if mode == Mode.PLAY else Mode.PLAY
 			_apply_mode()

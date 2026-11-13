@@ -157,6 +157,7 @@ var _warn_next := 0                ## next cue in cues[] whose warning hasn't be
 var _pending_tap2_at := -1.0       ## song_position to fire the banana's 2nd tap, or -1
 
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
+var _results: Results          ## the counting-up percent on the results screen
 var _monkey_state := "idle"
 var _monkey_fruit := ""
 var _monkey_state_t := -10.0
@@ -180,6 +181,8 @@ var _tick: AudioStreamWAV
 
 
 func _ready() -> void:
+	_results = Results.new()
+	add_child(_results)
 	# Match every file found anywhere under res://art/ and res://audio/sfx/ to a
 	# slot by name -- tolerating subfolders and doubled extensions.
 	var art_found := _scan_dir(ART_DIR, IMG_EXT)
@@ -273,6 +276,8 @@ func begin(compiled_cues: Array) -> void:
 	_warn_next = 0
 	_pending_tap2_at = -1.0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
+	if _results:
+		_results.reset()
 	_monkey_state = "idle"
 	_bump_t = -10.0
 	_monkey_fruit = ""
@@ -847,14 +852,11 @@ func _draw_hud() -> void:
 
 func _draw_results() -> void:
 	var font := ThemeDB.fallback_font
-	var box := Rect2(VP.x / 2 - 200, VP.y / 2 - 120, 400, 240)
+	var box := Rect2(VP.x / 2 - 180, VP.y / 2 - 110, 360, 220)
 	draw_rect(box, Color(0, 0, 0, 0.6))
-	var x := box.position.x + 32
-	var y := box.position.y + 54
-	draw_string(font, Vector2(x, y), "RESULTS", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color.WHITE)
 	var got: int = _tally["Perfect"] + _tally["Good"]
-	Results.draw(self, font, Vector2(x, y + 50), got, got + _tally["Miss"], Color.WHITE)
-	draw_string(font, Vector2(x, y + 160), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.8, 0.8, 0.8))
+	_results.draw_percent(self, font, box.get_center() + Vector2(0, -10), got, got + _tally["Miss"])
+	draw_string(font, Vector2(box.position.x, box.end.y - 18), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
 
 
 # --- practice round ----------------------------------------------------------

@@ -98,12 +98,18 @@ var _scars: Array = []             ## { kind, x } scorch / frost marks on your w
 var _cast_v := -10.0               ## visual time of the last cast (wand recoil)
 var _hurt := {}                    ## { kind, v } last hit you took (flash + shake)
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
+var _results: Results          ## the counting-up percent on the results screen
 
 var _impact_s: Vector2             ## burst point on screen
 var _dir: Vector2                  ## comet travel direction on screen
 
 
+var _pause: PauseMenu
+
 func _ready() -> void:
+	_pause = PauseMenu.attach(self, _start)   # Esc: Continue / Retry / Quit
+	_results = Results.new()
+	add_child(_results)
 	_font = ThemeDB.fallback_font
 	# the art is drawn big and shown small: mipmaps stop it shimmering as it scales
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -175,6 +181,8 @@ func _start() -> void:
 	_scars.clear()
 	_hurt = {}
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
+	if _results:
+		_results.reset()
 	var bar := FIRST_CALL_BAR
 	for pat in PATTERNS:
 		for n in pat:
@@ -197,7 +205,11 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		match e.keycode:
 			KEY_ESCAPE:
-				get_tree().change_scene_to_file("res://MainMenu.tscn")
+				if _phase == Phase.DONE:    # results screen: straight to the menu
+					get_tree().change_scene_to_file("res://MainMenu.tscn")
+				else:
+					_pause.open()
+				get_viewport().set_input_as_handled()
 			KEY_R:
 				_start()
 			KEY_SPACE, KEY_ENTER:
@@ -527,7 +539,7 @@ func _draw_results() -> void:
 	_panel(Rect2(326, 150, 500, 320))
 	_text("TOWER DEFENDED!" if _tally["Miss"] <= 6 else "THE TOWER IS SCORCHED", Vector2(576, 210), 32, INK, true)
 	var got: int = _tally["Perfect"] + _tally["Good"]
-	Results.draw(self, _font, Vector2(576, 270), got, got + _tally["Miss"], INK, true)
+	_results.draw_percent(self, _font, Vector2(576, 320), got, got + _tally["Miss"])
 	_text("SPACE / R to play again   -   Esc for menu", Vector2(576, 440), 18, INK.lightened(0.4), true)
 
 

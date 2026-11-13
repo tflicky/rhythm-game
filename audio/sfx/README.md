@@ -19,3 +19,10 @@ adding/replacing a file, click into the Godot editor once so it imports.
 
 There's a pool of 6 players, so overlapping sounds (a `cue` firing while a
 `catch` still rings) don't cut each other off.
+
+## Results drum roll (every level)
+
+`drum_roll.wav` (or `.ogg` / `.mp3`) in this folder plays while the results percent
+counts up, and stops the moment the count lands. The count takes 0.6 s (for 0%) up
+to 2.2 s (for 100%), so make it at least 2.2 s long; it's cut off when the count
+ends. Until the file exists, a plain synth snare roll stands in.
