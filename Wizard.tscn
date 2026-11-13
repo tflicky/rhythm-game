@@ -1,7 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/wizard_game.gd" id="1_root"]
-[ext_resource type="AudioStream" path="res://audio/music/Rhythm_Game.wav" id="2_song"]
+[ext_resource type="AudioStream" path="res://audio/music/Wizard_Song.wav" id="2_song"]
 
 [node name="Wizard" type="Node2D"]
 script = ExtResource("1_root")

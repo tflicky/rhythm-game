@@ -28,8 +28,12 @@ const APEX_AT := 0.3               ## fraction of the flight spent climbing to t
 const APEX_P := 0.45               ## how far along the path the hang point is
 const LANE_SPREAD := 95.0          ## sideways spread per beat of the bar (screen px)
 const MISS_FLY := 0.35             ## after a miss, seconds per "screen push" past the burst point
+## The song: audio/music/Wizard_Song.wav, beat 1 right at the start of the file.
+const SONG_BPM := 110.0
 const FIRST_CALL_BAR := 2          ## two bars of music before the first pattern
 ## One entry per call bar: [beat in bar, element]. The answer is the next bar.
+## If the song is too short for all of them, an even spread is used (always the
+## first and the last), so it still builds up to the hardest ones.
 const PATTERNS := [
 	[[0, "fire"], [2, "fire"]],
 	[[0, "ice"], [2, "ice"]],
@@ -132,7 +136,7 @@ func _ready() -> void:
 	_dir = Vector2.from_angle(deg_to_rad(BALL_DIR_DEG))
 
 	Conductor.stream_player = audio
-	Conductor.bpm = 128.0
+	Conductor.bpm = SONG_BPM
 	Conductor.first_beat_offset = 0.0
 	Conductor.video_offset = 0.0
 	Conductor.input_offset = Settings.input_offset(0.131)
@@ -184,7 +188,7 @@ func _start() -> void:
 	if _results:
 		_results.reset()
 	var bar := FIRST_CALL_BAR
-	for pat in PATTERNS:
+	for pat in _patterns_that_fit():
 		for n in pat:
 			var launch_beat: float = bar * 4 + float(n[0])
 			var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
@@ -194,6 +198,18 @@ func _start() -> void:
 		bar += 2
 	_phase = Phase.PLAY
 	Conductor.play()
+
+
+## As many PATTERNS as the song has room for (each takes a call bar + an answer bar).
+func _patterns_that_fit() -> Array:
+	var bars := int(audio.stream.get_length() / (4.0 * Conductor.seconds_per_beat))
+	var room := clampi((bars - FIRST_CALL_BAR) / 2, 1, PATTERNS.size())
+	if room == PATTERNS.size():
+		return PATTERNS
+	var picked := []
+	for i in room:
+		picked.append(PATTERNS[roundi(i * (PATTERNS.size() - 1) / maxf(room - 1, 1.0))])
+	return picked
 
 
 func _on_song_finished() -> void:

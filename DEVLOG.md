@@ -341,3 +341,13 @@ empty icon slot. It now shows one prop for each act (a flaming sword, a bowling 
 and a tennis ball) on a dotted juggling arc. No juggling art exists yet, so the icon
 is drawn in code by `tools/make_juggle_icon.gd`, which renders it to
 `art/juggling/icon.png`. Saving my own drawing over that PNG replaces it.
+
+## The Wizard gets its own song (Nov 13, later still)
+
+*"here is the wizard song"*: `Wizard_2.wav`, now `audio/music/Wizard_Song.wav`,
+110 BPM with beat 1 right at the start of the file. Measuring the tempo from the
+audio didn't work: the intro has no steady beat, and guesses ran anywhere from
+128 to 133, so I just gave it the BPM (110). At 110 the song is about 25 bars, room
+for 11 of the 17 call patterns. The level now picks an even spread of them so it
+still builds to the hardest ones, and uses more if the song gets longer. A bot hit
+all 40 balls Perfect, and in play it *"feels on beat"*.
