@@ -1,7 +1,8 @@
 extends Node2D
 ## Root of the level scene.
-##   mode PLAY   : a practice round (catch practice_goal coconuts cleanly), then
-##                 the beatmap feeds the coconut minigame.
+##   mode PLAY   : a practice round in two checkpoints -- catch practice_goal
+##                 coconuts cleanly, then banana_goal bananas -- then the beatmap
+##                 feeds the coconut minigame.
 ##   mode RECORD : you tap the cue times yourself and save them into the beatmap.
 ## Press F2 at runtime to switch modes (restarts the song).
 
@@ -16,8 +17,10 @@ enum Phase { PRACTICE, TRANSITION, SONG }
 @export_group("Practice round")
 ## Start each play session with a practice round. Turn off to jump straight into the song.
 @export var practice: bool = true
-## Clean (Perfect) catches needed to finish practice.
+## Clean (Perfect) coconut catches needed for the first checkpoint.
 @export var practice_goal: int = 3
+## Clean (Perfect) banana catches needed for the second (bananas come in pairs).
+@export var banana_goal: int = 4
 ## A practice coconut lands every this many beats...
 @export var practice_every: float = 4.0
 ## ...starting on this beat.
@@ -25,8 +28,9 @@ enum Phase { PRACTICE, TRANSITION, SONG }
 ## Practice runs over a metronome (not the song) this many beats long, then loops.
 @export var practice_metronome_beats: int = 64
 @export var practice_metronome_db: float = -8.0
-## Seconds the "here we go" banner shows before the song starts.
-@export var practice_outro: float = 2.0
+## Seconds between passing a checkpoint and the next one (or the song) starting,
+## so the fruit already in the air comes down first.
+@export var practice_outro: float = 1.5
 
 @onready var audio: AudioStreamPlayer = $AudioStreamPlayer
 @onready var game: Node2D = $CoconutGame
@@ -37,6 +41,7 @@ var _phase := Phase.SONG
 var _practice_passed := false   ## once passed, R replays the song without practice
 var _song_stream: AudioStream
 var _metronome: AudioStreamWAV
+var _practice_kind := "catch"   ## the checkpoint being practised: "catch" (coconuts), then "banana"
 
 
 var _pause: PauseMenu
@@ -93,10 +98,12 @@ func _restart() -> void:
 		_start_song()
 
 
-func _start_practice() -> void:
+func _start_practice(kind := "catch") -> void:
 	_phase = Phase.PRACTICE
+	_practice_kind = kind
 	game.practice = true
-	game.practice_goal = practice_goal
+	game.practice_kind = kind
+	game.practice_goal = practice_goal if kind == "catch" else banana_goal
 	game.practice_caught = 0
 	game.banner = ""
 	if _metronome == null:
@@ -107,14 +114,16 @@ func _start_practice() -> void:
 	game.begin(_practice_cues())
 
 
-## One coconut every practice_every beats across the metronome track; it loops
-## until the player gets enough clean catches.
+## One coconut (or one banana pair, a beat apart) every practice_every beats
+## across the metronome track; it loops until the player gets enough clean catches.
 func _practice_cues() -> Array:
 	var out: Array = []
 	var song_beats := float(practice_metronome_beats)
 	var b := practice_first_beat
-	while b < song_beats - 1.0:
-		out.append({"beat": b, "cue": "catch", "length": 0.0, "time": Conductor.time_of_beat(b)})
+	while b < song_beats - 2.0:
+		var beats := [b] if _practice_kind == "catch" else [b, b + 1.0]
+		for x in beats:
+			out.append({"beat": x, "cue": _practice_kind, "length": 0.0, "time": Conductor.time_of_beat(x)})
 		b += practice_every
 	return out
 
@@ -139,16 +148,22 @@ func _on_graded(grade: String) -> void:
 	if _phase != Phase.PRACTICE or grade != "Perfect":
 		return
 	game.practice_caught += 1
-	if game.practice_caught < practice_goal:
+	if game.practice_caught < game.practice_goal:
 		return
-	# Passed: nothing new falls, cheer, then the real song from the top.
+	# Checkpoint passed: nothing new falls, the fruit in the air comes down, then
+	# the banana checkpoint -- or, after that, the real song from the top.
 	_phase = Phase.TRANSITION
-	_practice_passed = true
+	var next := "banana" if _practice_kind == "catch" else ""
+	if next == "":
+		_practice_passed = true
 	game.stop_spawning()
-	game.banner = "Nice! Here we go!"
 	await get_tree().create_timer(practice_outro).timeout
-	if _phase == Phase.TRANSITION:   # not interrupted by R / F2 in the meantime
+	if _phase != Phase.TRANSITION:   # interrupted by R / S / F2 in the meantime
+		return
+	if next == "":
 		_start_song()
+	else:
+		_start_practice(next)
 
 
 func _on_song_finished() -> void:

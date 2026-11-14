@@ -170,6 +170,7 @@ var _last_press := ""
 var practice := false
 var practice_caught := 0
 var practice_goal := 3
+var practice_kind := "catch"       ## which checkpoint: "catch" (coconuts) or "banana"
 var banner := ""                   ## big centred message, e.g. between practice and the song
 @onready var _panel_sb := _panel_style()
 
@@ -890,25 +891,28 @@ func _draw_practice() -> void:
 	var w := box.size.x
 	draw_style_box(_panel_sb, box)
 	draw_string(font, Vector2(x, y + 48), "PRACTICE", HORIZONTAL_ALIGNMENT_CENTER, w, 34, ink)
-	draw_string(font, Vector2(x, y + 86), "Listen for the cue sound,", HORIZONTAL_ALIGNMENT_CENTER, w, 22, ink)
-	draw_string(font, Vector2(x, y + 114), "then press SPACEBAR to catch", HORIZONTAL_ALIGNMENT_CENTER, w, 22, ink)
-	draw_string(font, Vector2(x, y + 142), "the coconut on the beat!", HORIZONTAL_ALIGNMENT_CENTER, w, 22, ink)
+	var lines: Array = ["Listen for the cue sound,", "then press SPACEBAR to catch", "the coconut on the beat!"]
+	if practice_kind == "banana":
+		lines = ["Tap-tap means two bananas!", "Press SPACEBAR twice to catch", "them, in the same rhythm!"]
+	for i in lines.size():
+		draw_string(font, Vector2(x, y + 86 + 28 * i), lines[i], HORIZONTAL_ALIGNMENT_CENTER, w, 22, ink)
 	draw_string(font, Vector2(x, y + 266), "Press S to skip practice", HORIZONTAL_ALIGNMENT_CENTER, w, 18, Color(ink, 0.6))
-	# one coconut per catch needed; filled in as they're caught
+	# one fruit per catch needed; filled in as they're caught
+	var fruit: Texture2D = art_banana if practice_kind == "banana" else art_coconut
 	var r := 16.0
-	var icon := 64.0   ## on-screen diameter of a caught coconut
-	var gap := 84.0
+	var icon := 64.0 if practice_goal <= 3 else 54.0   ## on-screen width of a caught fruit
+	var gap := 84.0 if practice_goal <= 3 else 72.0
 	var cx := x + w * 0.5 - gap * (practice_goal - 1) * 0.5
 	for i in practice_goal:
 		var c := Vector2(cx + gap * i, y + 202)
 		if i < practice_caught:
-			if art_coconut:
-				# crop to the coconut itself -- the PNG has a lot of empty margin
-				if not _mbbox.has(art_coconut):
-					_mbbox[art_coconut] = _opaque_bbox(art_coconut)
-				var src: Rect2 = _mbbox[art_coconut]
-				var sz := src.size * (icon / maxf(src.size.x, 1.0))
-				draw_texture_rect_region(art_coconut, Rect2(c - sz * 0.5, sz), src)
+			if fruit:
+				# crop to the fruit itself -- the PNG has a lot of empty margin
+				if not _mbbox.has(fruit):
+					_mbbox[fruit] = _opaque_bbox(fruit)
+				var src: Rect2 = _mbbox[fruit]
+				var sz := src.size * (icon / maxf(maxf(src.size.x, src.size.y), 1.0))
+				draw_texture_rect_region(fruit, Rect2(c - sz * 0.5, sz), src)
 			else:
 				draw_circle(c, r, Color(0.45, 0.28, 0.14))
 		else:

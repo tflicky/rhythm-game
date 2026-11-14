@@ -13,19 +13,14 @@ keeping the same name.
 
 | Slot | When it plays | Now |
 |------|---------------|-----|
-| `salt_cue`   | cue: the salt shaker hops ("season me", first clack) | `salt_cue.wav` = your tong.wav pitched up |
-| `pepper_cue` | cue: the pepper shaker hops (second clack) | `pepper_cue.wav` = your tong.wav pitched down |
-| `flip_cue_1` | cue: SMALL sizzle on beat 1 of a flip bar | `flip_cue_1.wav` = 0.18 s cut of your sizzle.wav, quiet |
-| `flip_cue_2` | cue: BIG sizzle on beat 2 of a flip bar | `flip_cue_2.wav` = 0.45 s cut of your sizzle.wav, loud |
-| `pop_cue`    | cue: beats 1 and 2 of a pop bar (the flip onto the bun) | `pop_cue.wav` = your "Pop sound" recording, trimmed + turned up |
-| `salt_shake` | your salt shake (first press of a seasoning pair) | `salt_shake.wav` = one stroke of your Barrel Blast shaker take, pitched up a bit |
-| `pepper_shake` | your pepper shake (second press) | `pepper_shake.wav` = another stroke of your shaker take, pitched down a bit |
-| `tong`       | a press when there's nothing to answer (the tongs just click) | `tong.wav` |
-| `flip`       | your grab on beat 1 (press) | `flip.wav` |
-| `whoosh`     | your toss on beat 2 (let go) | placeholder noise |
-| `land`       | the patty lands on beat 3 | placeholder noise |
-| `sizzle`     | quiet tail under `land` on a normal flip | `sizzle.wav` |
-| `pop`        | the patty lands on the bun (beat 3 of a pop) | `pop.wav` |
+| `flip_cue_2` | the call: each patty landing on the grill, on its beat | `flip_cue_2.wav` = 0.45 s cut of your sizzle.wav |
+| `flip`       | your press: the tongs grab and flip a patty | `flip.wav` |
+| `sizzle`     | quietly, as the flipped patty lands back on the grill | `sizzle.wav` |
+| `tong`       | a press with nothing to flip (the tongs just click) | `tong.wav` |
+
+The other files here (`salt_cue`, `pepper_cue`, `salt_shake`, `pepper_shake`,
+`flip_cue_1`, `pop_cue`, `pop`) were for the old two-move version of the game and
+aren't used by it any more. `pop` is still used by the One-Burger Test.
 
 ## One-Burger Test (`GrillTest.tscn`)
 

@@ -28,9 +28,12 @@ const APEX_AT := 0.3               ## fraction of the flight spent climbing to t
 const APEX_P := 0.45               ## how far along the path the hang point is
 const LANE_SPREAD := 95.0          ## sideways spread per beat of the bar (screen px)
 const MISS_FLY := 0.35             ## after a miss, seconds per "screen push" past the burst point
-## The song: audio/music/Wizard_Song.wav, beat 1 right at the start of the file.
+## The song: audio/music/Wizard_Song.wav. Measured from the audio: 110 BPM, the
+## beat grid starts 0.243 s into the file, and the free intro runs for 6 bars --
+## the steady groove kicks in at bar 6 (13.3 s), so that's where the first call goes.
 const SONG_BPM := 110.0
-const FIRST_CALL_BAR := 2          ## two bars of music before the first pattern
+const SONG_OFFSET := 0.243
+const FIRST_CALL_BAR := 6          ## the free intro plays out before the first pattern
 ## One entry per call bar: [beat in bar, element]. The answer is the next bar.
 ## If the song is too short for all of them, an even spread is used (always the
 ## first and the last), so it still builds up to the hardest ones.
@@ -137,7 +140,7 @@ func _ready() -> void:
 
 	Conductor.stream_player = audio
 	Conductor.bpm = SONG_BPM
-	Conductor.first_beat_offset = 0.0
+	Conductor.first_beat_offset = SONG_OFFSET
 	Conductor.video_offset = 0.0
 	Conductor.input_offset = Settings.input_offset(0.131)
 	Conductor.song_finished.connect(_on_song_finished)
@@ -202,7 +205,7 @@ func _start() -> void:
 
 ## As many PATTERNS as the song has room for (each takes a call bar + an answer bar).
 func _patterns_that_fit() -> Array:
-	var bars := int(audio.stream.get_length() / (4.0 * Conductor.seconds_per_beat))
+	var bars := int((audio.stream.get_length() - Conductor.first_beat_offset) / (4.0 * Conductor.seconds_per_beat) + 0.05)
 	var room := clampi((bars - FIRST_CALL_BAR) / 2, 1, PATTERNS.size())
 	if room == PATTERNS.size():
 		return PATTERNS

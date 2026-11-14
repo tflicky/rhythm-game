@@ -351,3 +351,42 @@ audio didn't work: the intro has no steady beat, and guesses ran anywhere from
 for 11 of the 17 call patterns. The level now picks an even spread of them so it
 still builds to the hardest ones, and uses more if the song gets longer. A bot hit
 all 40 balls Perfect, and in play it *"feels on beat"*.
+
+## Playtesting with Mom: Wizard timing, a banana checkpoint, and Grill Master rebuilt (Nov 13–14)
+
+**First outside playtest.** *"I gave my mom the game to play, and she understood. Almost
+none of the Grill Master game. She just didn't understand the rhythm pattern of it or
+what she was supposed to be doing. Same with the Wizard game. The beats don't really
+match up with the song."*
+
+**Wizard was landing on the "&".** The song really is 110 BPM, but its beats start
+243 ms into the file, almost exactly half a beat, so every ball landed between the
+beats. The song also opens with a loose intro that has no steady beat, and balls were
+already coming then. Now the beat grid starts at 0.243 s and the first ball waits for
+the groove to kick in at bar 6 (13.3 s). That leaves room for 9 call patterns.
+
+**Grill Master: rethink it or scrap it.** *"I think we have to rethink the whole game
+or scrap it, its been a logistical nightmare"*, and Mom *"didnt understand the
+tutorial"*. What went wrong: two different moves (taps and hold-and-release), several
+cue sounds, plus burgers and how cooked they were. And the flip cue (small sizzle, big
+sizzle) didn't sound like what you had to do. Rhythm Heaven's rule is that the call
+sounds like the answer.
+
+Rebuilt simpler, with my picks: **flip burgers** as the one move, **sizzles** as the
+call, **no twist**. Raw patties drop onto the grill one at a time, each landing with a
+sizzle, in the rhythm you have to copy. Next bar you flip them back in the same rhythm,
+using my grab-toss-land drawing at each patty's spot. A flipped patty browns and hops
+over to the picnic table; a missed one burns. The tutorial is one card, "Flip it!",
+then the 1 & 2 & strip with a count-in. The script went from about 1,800 lines to about
+800.
+
+The flip speed took three tries: *"the animation for flipping burger seems really fast"*,
+then *"Still too fast"*, twice. It went from 0.2 s to 0.45 s to 0.7 s, and finally two
+beats, the length of the animation as I drew it. The tongs hurry on when flips come
+close together, and the patty keeps flying at its own pace. A bot gets all 54 flips
+Perfect.
+
+**Monkey tutorial: a banana checkpoint.** *"get rid of the nice here we go, and add an
+additional tutorial checkpoint just like the coconut one works and have the player
+practice catching bananas"*. After 3 clean coconuts, practice now asks for 4 clean
+bananas (tap-tap, catch-catch), then goes into the song. The banner is gone.
