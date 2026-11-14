@@ -29,6 +29,7 @@ const INK := Color(0.2, 0.14, 0.12)
 const SFX_DIR := "res://audio/sfx/grill/"
 const SFX_SLOTS := ["flip_cue_2", "flip", "sizzle", "tong"]
 const COOK_SHADER := preload("res://shaders/patty_cook.gdshader")
+const VIVID_SHADER := preload("res://shaders/vivid.gdshader")
 ## Your flip drawing, as separate layers (art/grilling/parts/): back arm, patty,
 ## front arm. Frame FLIP_GRAB is the grab (on your press), FLIP_TOP the top of the
 ## toss, FLIP_LAND the landing -- which is also the tongs' ready pose.
@@ -81,6 +82,19 @@ const ART := {
 @export var pepper_pos := Vector2(450, 270)          ## the pepper shaker next to it
 ## The picnic table, behind the grill: where it sits in your Krita scene.
 @export var table_rect := Rect2(9, 193, 408, 257)
+
+@export_group("Look")
+## Colour pop over all the art (not the text/UI). 0 / 1.0 / 0 / 1.0 = the art
+## exactly as drawn.
+## Extra colour that goes mostly to dull, greyish colours (the grill metal, shadows).
+@export_range(0.0, 1.5, 0.05) var art_vibrance: float = 0.5
+## Extra colour on everything (1.0 = none).
+@export_range(0.5, 2.0, 0.05) var art_saturation: float = 1.15
+## Gentle contrast so the colours read crisp (0 = none).
+@export_range(0.0, 0.5, 0.01) var art_contrast: float = 0.0
+## Sunshine: lifts the midtones so it reads as a bright day (1.0 = none; much
+## past 1.25 starts to look washed out).
+@export_range(1.0, 1.6, 0.01) var art_light: float = 1.2
 
 @export_group("Practice round")
 @export var practice: bool = true
@@ -141,6 +155,19 @@ func _ready() -> void:
 	_fx_layer = Node2D.new()
 	add_child(_fx_layer)
 	_fx_layer.draw.connect(_draw_fx)
+	if art_vibrance != 0.0 or art_saturation != 1.0 or art_contrast != 0.0 or art_light != 1.0:
+		var bright := ColorRect.new()          # re-colours everything drawn under z 9
+		bright.size = VP
+		bright.z_index = 9
+		bright.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var bm := ShaderMaterial.new()
+		bm.shader = VIVID_SHADER
+		bm.set_shader_parameter("vibrance", art_vibrance)
+		bm.set_shader_parameter("saturation", art_saturation)
+		bm.set_shader_parameter("contrast", art_contrast)
+		bm.set_shader_parameter("light", art_light)
+		bright.material = bm
+		add_child(bright)
 	_ui_layer = Node2D.new()
 	_ui_layer.z_index = 10            # the flipping patty and front arm go up to z 3
 	add_child(_ui_layer)

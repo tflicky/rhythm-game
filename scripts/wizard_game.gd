@@ -29,12 +29,30 @@ const APEX_P := 0.45               ## how far along the path the hang point is
 const LANE_SPREAD := 95.0          ## sideways spread per beat of the bar (screen px)
 const MISS_FLY := 0.35             ## after a miss, seconds per "screen push" past the burst point
 ## The song: audio/music/Wizard_Song.wav. Measured from the audio: 110 BPM, the
-## beat grid starts 0.243 s into the file, and the free intro runs for 6 bars --
-## the steady groove kicks in at bar 6 (13.3 s), so that's where the first call goes.
+## beat grid starts 0.243 s into the file (same grid as the first cut of the song).
+## The song is written in 3-bar phrases (from the MIDI parts: melody, organ and bass
+## all repeat every 3 bars, starting at DAW bar 4). Each pattern follows one phrase:
+##   bar 1 call (wizard throws over the melody), bar 2 answer (you), bar 3 breather
+##   (the melody finishes its sentence, nothing to hit).
+## The kalimba intro is DAW bars 1-3, so the first call is DAW bar 4 (bar 3 counting from 0).
 const SONG_BPM := 110.0
 const SONG_OFFSET := 0.243
-const FIRST_CALL_BAR := 6          ## the free intro plays out before the first pattern
-## One entry per call bar: [beat in bar, element]. The answer is the next bar.
+const FIRST_CALL_BAR := 3          ## the free intro plays out before the first pattern
+const PATTERN_BARS := 3            ## bars per pattern: call, answer, breather
+## Placeholder demo of the Rhythm Thief-style layout (tools/wizard_guide/make_demo.py):
+## starts on the beat at 0:00, 4 intro bars + a get-ready bar, then call/answer pairs.
+const DEMO_SONG := "res://audio/music/wizard_demo.ogg"
+const DEMO_FIRST_CALL_BAR := 5
+const DEMO_PATTERN_BARS := 2       ## the demo goes straight call, answer, call, answer
+
+## Play the placeholder demo song instead of Wizard_Song.wav (to try the
+## full-band call bar / thin answer bar idea). Untick to go back to your song.
+@export var use_demo_song := false
+
+var _first_call_bar := FIRST_CALL_BAR
+var _pattern_bars := PATTERN_BARS
+## One entry per call bar: [beat in bar, element]. The answer is the next bar
+## (then, with your song, a breather bar before the next call).
 ## If the song is too short for all of them, an even spread is used (always the
 ## first and the last), so it still builds up to the hardest ones.
 const PATTERNS := [
@@ -141,6 +159,12 @@ func _ready() -> void:
 	Conductor.stream_player = audio
 	Conductor.bpm = SONG_BPM
 	Conductor.first_beat_offset = SONG_OFFSET
+	if use_demo_song and ResourceLoader.exists(DEMO_SONG):
+		audio.stream = load(DEMO_SONG)
+		audio.stream.loop = false
+		Conductor.first_beat_offset = 0.0   # the demo starts right on the beat
+		_first_call_bar = DEMO_FIRST_CALL_BAR
+		_pattern_bars = DEMO_PATTERN_BARS
 	Conductor.video_offset = 0.0
 	Conductor.input_offset = Settings.input_offset(0.131)
 	Conductor.song_finished.connect(_on_song_finished)
@@ -190,7 +214,7 @@ func _start() -> void:
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	if _results:
 		_results.reset()
-	var bar := FIRST_CALL_BAR
+	var bar := _first_call_bar
 	for pat in _patterns_that_fit():
 		for n in pat:
 			var launch_beat: float = bar * 4 + float(n[0])
@@ -198,15 +222,16 @@ func _start() -> void:
 			_balls.append({"kind": n[1], "launch_t": Conductor.time_of_beat(launch_beat),
 				"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset,
 				"lane": float(n[0]), "state": "fly", "launched": false, "impact": -1.0, "burst_sfx": null, "hurt": false})
-		bar += 2
+		bar += _pattern_bars
 	_phase = Phase.PLAY
 	Conductor.play()
 
 
-## As many PATTERNS as the song has room for (each takes a call bar + an answer bar).
+## As many PATTERNS as the song has room for (each takes _pattern_bars bars; the
+## last one only needs its call + answer bar before the song ends).
 func _patterns_that_fit() -> Array:
 	var bars := int((audio.stream.get_length() - Conductor.first_beat_offset) / (4.0 * Conductor.seconds_per_beat) + 0.05)
-	var room := clampi((bars - FIRST_CALL_BAR) / 2, 1, PATTERNS.size())
+	var room := clampi((bars - _first_call_bar - 2) / _pattern_bars + 1, 1, PATTERNS.size())
 	if room == PATTERNS.size():
 		return PATTERNS
 	var picked := []

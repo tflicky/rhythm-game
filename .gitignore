@@ -9,3 +9,6 @@
 
 # Exported builds
 /build/
+
+# Wizard guide track: rebuilt by tools/wizard_guide/make_guide.py
+tools/wizard_guide/*.wav

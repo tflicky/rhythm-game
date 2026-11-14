@@ -390,3 +390,51 @@ Perfect.
 additional tutorial checkpoint just like the coconut one works and have the player
 practice catching bananas"*. After 3 clean coconuts, practice now asks for 4 clean
 bananas (tap-tap, catch-catch), then goes into the song. The banner is gone.
+
+## The Wizard song meets the game, and Grill Master gets some color (Nov 14)
+
+**A new Wizard song.** *"this is the definitive wizard song"*. It's the same song with a
+new 28-second opening, and it ends at 41.6 s instead of 54.7 s. From 28 s on it lines
+up exactly with the old file, so the beat fix from Mom's playtest still holds.
+
+**Grill Master, brighter, then more vibrant.** First pass was a brightness lift, but
+*"everything feels brighter but like in a flash bang kind of way, maybe I meant more
+vibrant like a kid seeing the world vs adult"*. Swapped it for a color boost that pushes
+the dull colors hardest. Then *"its more vibrant but now it looks like its a dark day"*:
+strong color reads darker, and the contrast curve was deepening the shadows. Final look:
+the color boost, no contrast, and a gentle "sunshine" lift. You can tune all of it in
+the Inspector under Look; none of the art files changed.
+
+**The real Wizard problem.** *"it doesnt seem like the song I made for wizard allows for
+much of a call and response"*. I compared it against two songs from rhythm games, and
+they make room in opposite ways:
+- **Hole in One (Rhythm Heaven Fever):** a quiet, steady track (about 10 dB quieter than
+  mine), with the cue sounds loud on top.
+- **Rhythm Thief:** loud, but every bar drops nearly silent on beat 4, which is where you
+  act. Every 4th bar is a plain groove bar, and there's a near-silent count-in bar
+  before each section.
+
+I liked the Rhythm Thief idea. Built a guide track (a click plus the wizard's throws and
+your spells, in the game's own sounds) and a synth demo song to try the layout in-game.
+
+**The low point.** *"i feel like im going crazy ive been working on this same project for
+so long and the only game im happy with is the monkey one"*, and *"I already have a
+wizard one that I was proud of but now I realize it just doesnt work with the game"*.
+The honest take: the song isn't wrong, it's the arrangement. *"I love all of the
+instruments every one, but I just leave no room for the call and response, its too
+cluttered with the melody it seems like"*.
+
+**What the MIDI showed.** Reading my five parts (melody, kalimba, organ, bass, drums)
+note by note, the song is built in **3-bar phrases** with a triplet feel. The game was
+working in 2-bar call/answer pairs, so calls kept landing in the middle of my musical
+sentences. The drums also don't come in until bar 15, so nothing marked the beat before
+that.
+
+**So the game bends to the song.** Each pattern is now 3 bars, matching my phrases:
+call, answer, then a breather bar where the melody finishes. The calls land on DAW bars
+4, 7, 10, 13 and 16, right where my bass, organ and melody start each phrase. The guide
+track was rebuilt to match. Played it: *"all of the them except maybe the last one felt
+like they worked"*. Why the last one didn't: *"when the call happens with the melody,
+the melody continues on while the player is trying to replicate the last bar of the
+melody still"*. The fix is on the music side: the melody rests in the answer bars
+(5, 8, 14, 17), or I export stems and the game mutes the melody there itself.
