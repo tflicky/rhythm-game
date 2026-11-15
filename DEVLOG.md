@@ -438,3 +438,25 @@ like they worked"*. Why the last one didn't: *"when the call happens with the me
 the melody continues on while the player is trying to replicate the last bar of the
 melody still"*. The fix is on the music side: the melody rests in the answer bars
 (5, 8, 14, 17), or I export stems and the game mutes the melody there itself.
+
+## Every game shows you how it's played (Nov 14, later)
+
+Asked for *"a little animation to showcase how each game is played like when you start
+the monkey game he catches one coconut, for the grill a burger gets flipped, for the
+wizard he destroys a fireball with with an ice power"*.
+
+Each level now opens with a short "watch" demo that plays itself, using my art and
+sounds and the same clock as the real game, so it always lands Perfect:
+
+- **Monkey Business:** a "WATCH!" panel, the cue sound, and the monkey catches one
+  coconut on his own. Practice starts a second later. S still skips to the song.
+- **Grill Master:** behind the "Flip it!" card, a burger sizzles, then the tongs flip it,
+  it browns and hops to the table, every 2 bars until SPACE.
+- **Wizard:** before the title card, the tower lobs one fireball and the wand freezes it
+  with ice: "Fire? Freeze it with ICE!" SPACE skips straight in.
+
+**What broke:** the Wizard's ice burst covered the "WATCH!" text in the sky, so the
+caption moved down onto the ground between the wizard and the tower.
+
+Each demo has an Inspector switch to turn it off: **Demo** (Monkey), **Card Demo**
+(Grill), **Show Demo** (Wizard). The captions are placeholder wording.

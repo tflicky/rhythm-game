@@ -7,7 +7,7 @@ extends Node2D
 ## Press F2 at runtime to switch modes (restarts the song).
 
 enum Mode { PLAY, RECORD }
-enum Phase { PRACTICE, TRANSITION, SONG }
+enum Phase { DEMO, PRACTICE, TRANSITION, SONG }
 
 ## Drag a Beatmap .tres here (defaults to rhythm_monkey.tres).
 @export var beatmap: Beatmap
@@ -17,6 +17,10 @@ enum Phase { PRACTICE, TRANSITION, SONG }
 @export_group("Practice round")
 ## Start each play session with a practice round. Turn off to jump straight into the song.
 @export var practice: bool = true
+## Before practice, show how it's played: one coconut falls and the monkey catches it by himself.
+@export var demo: bool = true
+## Seconds after the demo catch before practice starts.
+@export var demo_outro: float = 1.2
 ## Clean (Perfect) coconut catches needed for the first checkpoint.
 @export var practice_goal: int = 3
 ## Clean (Perfect) banana catches needed for the second (bananas come in pairs).
@@ -93,15 +97,36 @@ func _set_active(n: Node2D, on: bool) -> void:
 
 func _restart() -> void:
 	if mode == Mode.PLAY and practice and not _practice_passed:
-		_start_practice()
+		if demo:
+			_start_demo()
+		else:
+			_start_practice()
 	else:
 		_start_song()
+
+
+## The "watch" demo: one coconut on the practice metronome, caught by the game itself.
+func _start_demo() -> void:
+	_phase = Phase.DEMO
+	_practice_kind = "catch"
+	game.practice = true
+	game.demo = true
+	game.practice_kind = "catch"
+	game.practice_caught = 0
+	game.banner = ""
+	if _metronome == null:
+		_metronome = ClickTrack.make(Conductor.bpm, practice_metronome_beats, Conductor.beats_per_measure, Conductor.first_beat_offset)
+	audio.stream = _metronome
+	audio.volume_db = practice_metronome_db
+	Conductor.play()
+	game.begin([{"beat": practice_first_beat, "cue": "catch", "length": 0.0, "time": Conductor.time_of_beat(practice_first_beat)}])
 
 
 func _start_practice(kind := "catch") -> void:
 	_phase = Phase.PRACTICE
 	_practice_kind = kind
 	game.practice = true
+	game.demo = false
 	game.practice_kind = kind
 	game.practice_goal = practice_goal if kind == "catch" else banana_goal
 	game.practice_caught = 0
@@ -131,6 +156,7 @@ func _practice_cues() -> Array:
 func _start_song() -> void:
 	_phase = Phase.SONG
 	game.practice = false
+	game.demo = false
 	game.banner = ""
 	audio.stream = _song_stream
 	audio.volume_db = 0.0
@@ -145,6 +171,12 @@ func _start_song() -> void:
 
 
 func _on_graded(grade: String) -> void:
+	if _phase == Phase.DEMO:
+		_phase = Phase.TRANSITION
+		await get_tree().create_timer(demo_outro).timeout
+		if _phase == Phase.TRANSITION:   # not skipped with S / R in the meantime
+			_start_practice()
+		return
 	if _phase != Phase.PRACTICE or grade != "Perfect":
 		return
 	game.practice_caught += 1
@@ -180,7 +212,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			_restart()
 		KEY_S:
 			# skip practice (S is the recorder's save key in RECORD mode -- phase is SONG there)
-			if _phase == Phase.PRACTICE or _phase == Phase.TRANSITION:
+			if _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION]:
 				_practice_passed = true
 				_start_song()
 		KEY_ESCAPE:

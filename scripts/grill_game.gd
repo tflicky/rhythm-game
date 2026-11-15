@@ -98,6 +98,9 @@ const ART := {
 
 @export_group("Practice round")
 @export var practice: bool = true
+## While the "Flip it!" card is up, show how it's played behind it: a burger drops
+## with a sizzle and gets flipped a bar later, on a loop until SPACE.
+@export var card_demo: bool = true
 ## Clean tries needed before the song.
 @export var practice_goal: int = 2
 @export var practice_metronome_db: float = -8.0
@@ -112,6 +115,7 @@ var _practice_passed := false
 var _song_stream: AudioStream
 var _metronome: AudioStreamWAV
 var _card_ms := 0
+var _demo_next := 4.0             ## card demo: the beat the next demo burger sizzles on
 
 var _patties: Array = []           ## { spot, t, beat, state, t0, sprite, mat, sounded, cyc, i }
 var _answers: Array = []           ## { beat, time, patty, cyc, i } -- still to grade, in time order
@@ -275,6 +279,29 @@ func _show_card() -> void:
 	_reset_round()
 	_phase = Phase.CARD
 	_card_ms = Time.get_ticks_msec()
+	if card_demo:
+		_start_card_demo()
+
+
+## The demo behind the card: the practice metronome, one burger every two bars.
+func _start_card_demo() -> void:
+	_reset_round()
+	_demo_next = 4.0             # one bar of clicks first
+	if _metronome == null:
+		_metronome = ClickTrack.make(Conductor.bpm, 64, Conductor.beats_per_measure, Conductor.first_beat_offset)
+	audio.stream = _metronome
+	audio.volume_db = practice_metronome_db
+	Conductor.play()
+
+
+## Card demo: queue the next burger (sizzle on the call beat, flip a bar later).
+func _schedule_card_demo() -> void:
+	if Conductor.song_position_in_beats < _demo_next - 1.0:
+		return
+	var p := _new_patty(0, _demo_next, null)
+	var ab := _demo_next + 4.0
+	_answers.append({"beat": ab, "time": Conductor.time_of_beat(ab), "patty": p, "cyc": null, "i": 0})
+	_demo_next += 8.0
 
 
 func _start_practice() -> void:
@@ -329,6 +356,8 @@ func _new_patty(spot: int, beat: float, cyc: Variant) -> Dictionary:
 func _on_song_finished() -> void:
 	if _phase == Phase.SONG:
 		_finished = true
+	elif _phase == Phase.CARD and card_demo:
+		_start_card_demo()             # the metronome ran out: loop the demo
 
 
 ## Practice: queue the next try (call bar, maybe a count-in bar, answer bar) a
@@ -373,13 +402,18 @@ func _judge_practice() -> void:
 
 func _process(dt: float) -> void:
 	$Field.cameo_on = _phase == Phase.SONG   # the football throw is for the real song only
-	if _phase != Phase.CARD:
+	if _phase != Phase.CARD or (card_demo and Conductor.playing):
 		if _phase == Phase.PRACTICE:
 			_judge_practice()
 		if _phase == Phase.PRACTICE:
 			_schedule_practice()
 		var now: float = Conductor.song_position
 		var latency := AudioServer.get_output_latency()
+		if _phase == Phase.CARD:
+			_schedule_card_demo()
+			# the demo flips by itself, exactly when a perfect press would land
+			while not _answers.is_empty() and now >= _answers[0]["time"] + Conductor.input_offset:
+				_hit(_answers.pop_front(), 0.0)
 		# the call sizzles, fired output-latency early so they're heard on the beat
 		for p in _patties:
 			if not p["sounded"] and now >= p["t"] - latency:

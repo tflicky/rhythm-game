@@ -172,6 +172,7 @@ var practice_caught := 0
 var practice_goal := 3
 var practice_kind := "catch"       ## which checkpoint: "catch" (coconuts) or "banana"
 var banner := ""                   ## big centred message, e.g. between practice and the song
+var demo := false                  ## "watch" demo before practice: the monkey catches by himself, presses are ignored
 @onready var _panel_sb := _panel_style()
 
 var _sfx_players: Array[AudioStreamPlayer] = []
@@ -352,6 +353,13 @@ func _process(_dt: float) -> void:
 
 	for i in range(_falling.size() - 1, -1, -1):
 		var f: Dictionary = _falling[i]
+		# Demo: he catches it himself, the moment it reaches his hands.
+		if demo and now >= f["cue"]["time"] + Conductor.input_offset:
+			if not sfx_catch_on_beat:
+				_play_catch(f["cue"]["cue"])
+			_set_monkey("catch", f["cue"]["cue"])
+			_resolve(f, "Perfect")
+			continue
 		# The thunk, pre-scheduled onto the cue's beat. Fire it output-latency early
 		# so it leaves the speakers exactly when the music reaches the beat.
 		if sfx_catch_on_beat and not f["sfx_done"] and now >= f["cue"]["time"] - latency:
@@ -378,7 +386,7 @@ func _unhandled_input(e: InputEvent) -> void:
 	var pressed: bool = e.is_action_pressed("ui_accept") \
 		or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT) \
 		or (e is InputEventScreenTouch and e.pressed)
-	if not pressed:
+	if not pressed or demo:
 		return
 	if _falling.is_empty():
 		_log_press("no fruit falling", 0.0)
@@ -516,7 +524,7 @@ func _draw() -> void:
 
 	_draw_twister(now)
 	_draw_monkey()
-	if practice:
+	if practice and not demo:
 		_draw_you_label()   # under the fruit, so a coconut passes in front of it
 
 	for f in _falling:
@@ -541,7 +549,9 @@ func _draw() -> void:
 
 	_draw_fx(now)
 	_draw_count_in(now)
-	if practice:
+	if demo:
+		_draw_demo()
+	elif practice:
 		_draw_practice()
 	else:
 		_draw_hud()
@@ -917,6 +927,17 @@ func _draw_practice() -> void:
 				draw_circle(c, r, Color(0.45, 0.28, 0.14))
 		else:
 			draw_arc(c, r, 0.0, TAU, 32, Color(0.2, 0.14, 0.12, 0.45), 3.0)
+
+
+## The "watch" panel: same spot and style as the practice panel.
+func _draw_demo() -> void:
+	var font := ThemeDB.fallback_font
+	var box := Rect2(VP.x - 400, 24, 376, 150)
+	var ink := Color(0.2, 0.14, 0.12)
+	draw_style_box(_panel_sb, box)
+	draw_string(font, Vector2(box.position.x, box.position.y + 52), "WATCH!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 38, ink)
+	draw_string(font, Vector2(box.position.x, box.position.y + 92), "Cue sound... then catch!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 22, ink)
+	draw_string(font, Vector2(box.position.x, box.position.y + 132), "Press S to skip practice", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(ink, 0.6))
 
 
 func _draw_banner() -> void:

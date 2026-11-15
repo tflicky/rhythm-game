@@ -12,7 +12,7 @@ extends Node2D
 ## (art/wizard/frames.json), so the wand, the spell and its burst line up exactly
 ## as drawn. The sky, hills, enemy tower and wall are placeholder drawings.
 
-enum Phase { CARD, PLAY, DONE }
+enum Phase { DEMO, CARD, PLAY, DONE }
 
 const VP := Vector2(1152, 648)
 const PERFECT := 0.075
@@ -48,6 +48,9 @@ const DEMO_PATTERN_BARS := 2       ## the demo goes straight call, answer, call,
 ## Play the placeholder demo song instead of Wizard_Song.wav (to try the
 ## full-band call bar / thin answer bar idea). Untick to go back to your song.
 @export var use_demo_song := false
+## Before the title card, show how it's played: the tower lobs one fireball and
+## your wand freezes it with ice, by itself. SPACE skips straight into the game.
+@export var show_demo := true
 
 var _first_call_bar := FIRST_CALL_BAR
 var _pattern_bars := PATTERN_BARS
@@ -116,6 +119,8 @@ var _font: Font
 var _stars: Array[Vector3] = []
 
 var _phase := Phase.CARD
+var _song_stream: AudioStream      ## the level's song (the demo runs on a click track instead)
+var _demo_end := 0.0               ## song time the demo hands over to the title card
 var _balls: Array = []             ## { kind, launch_t, hit_t, arrive_v, state, ... }
 var _spells: Array = []            ## { kind, t0, impact, fizzle }
 var _pops: Array = []              ## { text, col, t0 } grade text by the burst
@@ -168,6 +173,37 @@ func _ready() -> void:
 	Conductor.video_offset = 0.0
 	Conductor.input_offset = Settings.input_offset(0.131)
 	Conductor.song_finished.connect(_on_song_finished)
+	_song_stream = audio.stream
+	if show_demo:
+		_start_demo()
+
+
+## The "watch" demo: a click track, one fireball launched after a bar of clicks,
+## frozen with ice exactly on the beat a bar later, then the title card.
+func _start_demo() -> void:
+	Conductor.stop()
+	_balls.clear()
+	_spells.clear()
+	_pops.clear()
+	_hurt = {}
+	_phase = Phase.DEMO
+	audio.stream = ClickTrack.make(Conductor.bpm, 16, Conductor.beats_per_measure, Conductor.first_beat_offset)
+	audio.volume_db = -8.0
+	var launch_beat := 4.0
+	var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
+	_balls.append({"kind": "fire", "launch_t": Conductor.time_of_beat(launch_beat),
+		"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset,
+		"lane": 0.0, "state": "fly", "launched": false, "impact": -1.0, "burst_sfx": null, "hurt": false})
+	_demo_end = hit_t + 1.6
+	Conductor.play()
+
+
+func _end_demo() -> void:
+	Conductor.stop()
+	_balls.clear()
+	_spells.clear()
+	_pops.clear()
+	_phase = Phase.CARD
 
 
 func _exit_tree() -> void:
@@ -206,6 +242,8 @@ func _c2s(p: Vector2) -> Vector2:
 
 func _start() -> void:
 	Conductor.stop()
+	audio.stream = _song_stream
+	audio.volume_db = 0.0
 	_balls.clear()
 	_spells.clear()
 	_pops.clear()
@@ -272,8 +310,8 @@ func _unhandled_input(e: InputEvent) -> void:
 
 ## A spell fires every press. If a ball is inside the hit window, the spell
 ## flies to the burst point and lands exactly when the ball gets there.
-func _cast(kind: String) -> void:
-	if _phase != Phase.PLAY:
+func _cast(kind: String, auto := false) -> void:
+	if not (_phase == Phase.PLAY or (_phase == Phase.DEMO and auto)):
 		return
 	var now := Conductor.live_position()
 	var v := now + Conductor.video_offset
@@ -326,7 +364,14 @@ func _miss() -> void:
 # --- clock -----------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
-	if _phase == Phase.PLAY and Conductor.playing:
+	if _phase == Phase.DEMO and Conductor.playing:
+		# the demo casts the opposite element by itself, exactly when a perfect press registers
+		for b in _balls:
+			if b["state"] == "fly" and Conductor.live_position() >= b["hit_t"] + Conductor.input_offset:
+				_cast("ice" if b["kind"] == "fire" else "fire", true)
+		if Conductor.song_position >= _demo_end:
+			_end_demo()
+	if (_phase == Phase.PLAY or _phase == Phase.DEMO) and Conductor.playing:
 		var pos := Conductor.song_position
 		var v := Conductor.visual_position
 		var lat := AudioServer.get_output_latency()
@@ -364,7 +409,7 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	var v := Conductor.visual_position if _phase != Phase.CARD else 0.0
 	var beat_pulse := 0.0
-	if _phase == Phase.PLAY:
+	if _phase == Phase.PLAY or _phase == Phase.DEMO:
 		beat_pulse = exp(-fposmod(Conductor.song_position_in_beats, 1.0) * 5.0)
 	_draw_backdrop(beat_pulse)
 	_draw_enemy(v)
@@ -387,7 +432,12 @@ func _draw() -> void:
 		if v >= p["t0"]:
 			_text(p["text"], _impact_s + Vector2(-260, 90 - 30 * k), 32, Color(p["col"], 1.0 - k), true, 1.0 - k)
 	_draw_hud()
-	if _phase == Phase.CARD:
+	if _phase == Phase.DEMO:
+		# on the dark ground, clear of the ball's flight and the burst in the sky
+		_text("WATCH!", Vector2(660, 478), 40, Color.WHITE, true, 1.0)
+		_text("Fire? Freeze it with ICE!", Vector2(660, 512), 22, COL["ice"], true, 1.0)
+		_text("SPACE to skip", Vector2(576, VP.y - 22), 18, Color(1, 1, 1, 0.6), true)
+	elif _phase == Phase.CARD:
 		_draw_card()
 	elif _phase == Phase.DONE:
 		_draw_results()
