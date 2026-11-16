@@ -8,6 +8,7 @@ extends Node
 ## Each level adds one of these as a child, calls draw_percent() from its own
 ## drawing every frame the results are up (the count starts on the first call),
 ## and reset() when the level restarts.
+## Finishing with 100% saves a gold star for the level (Settings.set_perfect).
 ##
 ## The drum roll is your sound: res://audio/sfx/drum_roll.wav (or .ogg / .mp3).
 ## Until that file exists a plain synth roll stands in.
@@ -85,6 +86,11 @@ func draw_percent(ci: CanvasItem, font: Font, center: Vector2, got: int, total: 
 		_t0 = Time.get_ticks_msec()
 		_pct = percent(got, total)
 		_roll.play()
+		# a perfect run: the level gets its gold star on the menu
+		if total > 0 and got >= total and ci.is_inside_tree():
+			var scene := ci.get_tree().current_scene
+			if scene and not scene.scene_file_path.is_empty():
+				Settings.set_perfect(scene.scene_file_path)
 	var t := (Time.get_ticks_msec() - _t0) / 1000.0
 	var ct := _count_time()
 	# the count: an ease-out, so it races at first and creeps in at the end

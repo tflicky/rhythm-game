@@ -4,9 +4,11 @@ extends Node2D
 ## Call: on a call bar, raw patties drop onto the grill one per note of the bar's
 ## rhythm -- each lands on its beat with a SIZZLE (left to right across the grate).
 ## Answer: on the next bar, flip them back in the same rhythm, one SPACE per
-## patty. Your tongs flip each one (the flip you drew: grab, toss, land); it lands
-## with a quiet sizzle, browns, and hops off onto the picnic table. Miss one and it
-## chars and smokes. A press with nothing to flip just clicks the tongs.
+## patty. Your tongs flip each one (the flip you drew: grab, toss) and it flies
+## off the grill, browning on the way, straight onto a bun waiting on the picnic
+## table (patty spot 1 -> bun 1, and so on). Then a critter steals it -- each
+## burger gets the next steal in STEALS, in order (see "critters" below). Miss one and it chars and smokes on the grill. A press with
+## nothing to flip just clicks the tongs.
 ##
 ## Starts with a short tutorial: one caption card, then practice over a metronome
 ## (listen, count-in, your turn) until `practice_goal` clean tries. The 1 & 2 &
@@ -27,7 +29,7 @@ const INK := Color(0.2, 0.14, 0.12)
 ## Every sound is a file in SFX_DIR named after its slot (.wav / .ogg / .mp3).
 ## See audio/sfx/grill/README.md.
 const SFX_DIR := "res://audio/sfx/grill/"
-const SFX_SLOTS := ["flip_cue_2", "flip", "sizzle", "tong"]
+const SFX_SLOTS := ["flip_cue_2", "flip", "sizzle", "tong", "bun"]
 const COOK_SHADER := preload("res://shaders/patty_cook.gdshader")
 const VIVID_SHADER := preload("res://shaders/vivid.gdshader")
 ## Your flip drawing, as separate layers (art/grilling/parts/): back arm, patty,
@@ -48,9 +50,24 @@ const DRAWING_AT := Vector2(125, 0)
 const DROP_S := 0.12               ## a called patty falls this long, landing on its beat
 const DROP_H := 70.0               ## ...from this far up (screen px)
 const SQUASH_S := 0.18             ## the little squash when it lands
-const COOK_S := 0.35               ## a flipped patty browns over this long
-const LEAVE_AFTER := 0.35          ## seconds after landing before it hops off to the table
-const LEAVE_S := 0.45              ## the hop to the table
+const THROW_H := 20.0              ## extra height (screen px) on the arc from the grill to the bun
+## The steals, used in this order (burger 1 gets the first, burger 6 the first again).
+##   squirrel         runs in along the table, grabs it, runs back out
+##   rabbit           hops in, grabs it, hops back out
+##   flying_squirrel  glides in and catches it in mid-air, before it reaches the bun
+##   raccoon          climbs up from under the table, grabs it, climbs back down
+##   mi_squirrel      drops from the sky on a rope, grabs it, gets pulled back up
+const STEALS := ["squirrel", "rabbit", "flying_squirrel", "raccoon", "mi_squirrel"]
+## Per steal, in beats: [coming in (ends at the grab), leaving with the burger].
+## The grab lands on a beat (except the flying squirrel's, which is mid-flip).
+const STEAL_BEATS := {
+	"squirrel": [1.0, 1.5],
+	"rabbit": [1.0, 2.0],
+	"flying_squirrel": [1.0, 1.5],
+	"raccoon": [1.0, 1.5],
+	"mi_squirrel": [1.0, 1.5],
+}
+const FLY_CATCH := 1.8             ## beats after your press the flying squirrel catches the patty
 const BURN_S := 0.25               ## a missed patty chars over this long...
 const BURN_FADE_AFTER := 0.7       ## ...then after this long fades away
 const BURN_FADE_S := 0.4
@@ -71,6 +88,13 @@ const ART := {
 	"salt": ["season/salt.png", Rect2(-18, -24, 36, 48)],
 	"pepper": ["season/pepper.png", Rect2(-18, -24, 36, 48)],
 	"picnic_table": ["scene/table.png", Rect2(9, 193, 408, 257)],   # drawn into `table_rect`
+	"bun": ["scene/bun.png", Rect2(-34, -12, 68, 30)],    # the bottom bun waiting on the table (its middle at a bun spot)
+	# critters: drawn facing RIGHT; the box's (0, 0) is where the burger goes (its mouth)
+	"squirrel": ["critters/squirrel.png", Rect2(-70, -40, 80, 70)],
+	"rabbit": ["critters/rabbit.png", Rect2(-75, -60, 85, 90)],
+	"flying_squirrel": ["critters/flying_squirrel.png", Rect2(-90, -30, 110, 60)],
+	"raccoon": ["critters/raccoon.png", Rect2(-50, -20, 100, 110)],
+	"mi_squirrel": ["critters/mi_squirrel.png", Rect2(-35, -75, 70, 95)],
 }
 
 @export var beatmap: Beatmap
@@ -79,8 +103,13 @@ const ART := {
 ## Where the patties sit on the grate (screen px, their middles), in the order
 ## they're called: note 1 of a bar goes on spot 1, and so on.
 @export var patty_spots := PackedVector2Array([Vector2(660, 332), Vector2(735, 288), Vector2(810, 332), Vector2(872, 288)])
-## Where a cooked patty hops to, on the picnic table (screen px).
-@export var table_drop := Vector2(330, 236)
+## The buns waiting on the picnic table (screen px, where the patty lands).
+## A flip from patty spot 1 lands on bun 1, and so on.
+@export var bun_spots := PackedVector2Array([Vector2(170, 234), Vector2(218, 249), Vector2(265, 264), Vector2(313, 279)])
+## How big a patty looks on its bun, compared to on the grill.
+@export var bun_patty_scale := 0.75
+## Where the squirrel and rabbit come from / run off to (screen x, off the left edge).
+@export var critter_exit_x := -120.0
 @export var salt_pos := Vector2(409, 253)            ## the salt shaker on the table (its middle)
 @export var pepper_pos := Vector2(450, 270)          ## the pepper shaker next to it
 ## The picnic table, behind the grill: where it sits in your Krita scene.
@@ -118,6 +147,7 @@ const ART := {
 @onready var audio: AudioStreamPlayer = $AudioStreamPlayer
 @onready var _stage: Node2D = $Stage
 
+var _skip_btn: Button               ## phone: the Skip button during practice (null on a computer)
 var _phase := Phase.CARD
 var _practice_passed := false
 var _song_stream: AudioStream
@@ -159,18 +189,27 @@ var _next_player := 0
 var _panel_sb: StyleBoxFlat
 var _back_layer: Node2D            ## behind the grill: the picnic table + shakers
 var _fx_layer: Node2D              ## steam and smoke, over the patties, under the tongs
+var _critter_layer: Node2D         ## the burger thieves: over the table, under a carried burger
+var _critters: Array = []          ## { kind, patty, t0, catch_t, end_t, at, pos, face, alpha }
+var _steal_n := 0                  ## burgers stolen so far (picks the next steal in STEALS)
+var _frame_c: Array[Vector2] = []  ## flip_patty frame i: where the patty is vs. frame 0 (texture px)
 var _ui_layer: Node2D              ## practice strip, cards, results: over everything
 var _pause: PauseMenu
 
 
 func _ready() -> void:
 	_pause = PauseMenu.attach(self, _restart)   # Esc: Continue / Retry / Quit
+	_skip_btn = TutorialUI.add_skip_button(self, _skip_practice)   # phone only
 	_results = Results.new()
 	add_child(_results)
 	_back_layer = Node2D.new()
 	add_child(_back_layer)
 	move_child(_back_layer, _stage.get_index())
 	_back_layer.draw.connect(_draw_back)
+	_critter_layer = Node2D.new()
+	_critter_layer.z_index = 1         # over a burger on its bun (z 0), under a carried / flying one (z 2)
+	add_child(_critter_layer)
+	_critter_layer.draw.connect(_draw_critters)
 	_fx_layer = Node2D.new()
 	add_child(_fx_layer)
 	_fx_layer.draw.connect(_draw_fx)
@@ -207,6 +246,8 @@ func _ready() -> void:
 			frames.append(load("%s%s/%s_%02d.png" % [PARTS_DIR, part, part, i]))
 		_frames[part] = frames
 	_patty_c = Rect2(_frames["flip_patty"][0].get_image().get_used_rect()).get_center()
+	for tex: Texture2D in _frames["flip_patty"]:
+		_frame_c.append(Rect2(tex.get_image().get_used_rect()).get_center() - _patty_c)
 	_home = _stage.position + (DRAWING_AT + _patty_c) * _stage.scale.x
 	var tong_mat := ShaderMaterial.new()      # just the outline (the tongs are grey)
 	tong_mat.shader = COOK_SHADER
@@ -222,6 +263,9 @@ func _ready() -> void:
 		Conductor.input_offset = Settings.input_offset(beatmap.input_offset)
 	Conductor.song_finished.connect(_on_song_finished)
 	_load_sounds()
+	# entering the level: the sound your press makes -- the tongs, click-click
+	_play("tong", -4.0)
+	get_tree().create_timer(0.16).timeout.connect(_play.bind("tong", -4.0))
 	_restart()
 
 
@@ -279,6 +323,8 @@ func _reset_round() -> void:
 		if is_instance_valid(p["sprite"]):
 			p["sprite"].queue_free()
 	_patties.clear()
+	_critters.clear()
+	_steal_n = 0
 	_answers.clear()
 	_cycles.clear()
 	_fx.clear()
@@ -489,6 +535,8 @@ func _judge_practice() -> void:
 # --- per frame -------------------------------------------------------------------
 
 func _process(dt: float) -> void:
+	if _skip_btn:
+		_skip_btn.visible = _phase in [Phase.PRACTICE, Phase.SHOT]
 	$Field.cameo_on = _phase == Phase.SONG   # the football throw is for the real song only
 	if _phase != Phase.CARD or (card_demo and Conductor.playing):
 		if _phase == Phase.PRACTICE:
@@ -514,10 +562,12 @@ func _process(dt: float) -> void:
 				and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
 			_miss(_answers.pop_front())
 		_drive_patties(Conductor.visual_position)
+		_drive_critters(Conductor.visual_position)
 		_fx = _fx.filter(func(f): return now - f["t0"] < 1.5)
 	_drive_tongs(Conductor.visual_position, dt)   # on the card too, so they're there from the start
 	_back_layer.queue_redraw()
 	_fx_layer.queue_redraw()
+	_critter_layer.queue_redraw()
 	_ui_layer.queue_redraw()
 
 
@@ -533,7 +583,8 @@ func _to_stage(screen: Vector2) -> Vector2:
 
 
 ## Each patty through its life: waiting -> dropping onto the grill (lands on its
-## beat) -> raw -> flipping -> cooked -> hops off to the table. Or burnt -> fades.
+## beat) -> raw -> flipping (tossed off the grill onto its bun) -> on the bun ->
+## stolen. Or burnt on the grill -> fades.
 func _drive_patties(vis: float) -> void:
 	for p in _patties:
 		var st: String = p["state"]
@@ -548,11 +599,10 @@ func _drive_patties(vis: float) -> void:
 			p["sprite"].texture = _frames["flip_patty"][0]
 			p["state"] = "drop"
 			st = "drop"
-			# a patty still sitting on this spot makes way: off to the table now
+			# a patty still sitting on this grill spot makes way
 			for q in _patties:
-				if q != p and q["spot"] == p["spot"] and q["state"] in ["cooked", "burnt", "raw"]:
-					q["state"] = "leave" if q["state"] == "cooked" else "gone"
-					q["t0"] = vis
+				if q != p and q["spot"] == p["spot"] and q["state"] in ["burnt", "raw"]:
+					q["state"] = "gone"
 		var s: Sprite2D = p["sprite"]
 		var at: Vector2 = DRAWING_AT + _patty_c + _spot_off(p["spot"])
 		match st:
@@ -572,28 +622,28 @@ func _drive_patties(vis: float) -> void:
 				s.position = at
 				s.scale = Vector2(1.0 + sq, 1.0 - sq)
 			"flip":
+				# your drawing up to the top of the toss; on the way down the patty
+				# also travels over to its bun, browning as it goes
 				var u: float = vis - p["t0"]
-				s.position = at
-				s.scale = Vector2.ONE
+				var up: float = p["dur"] * FLIP_UP_K
+				var k := clampf((u - up) / (p["dur"] - up), 0.0, 1.0)
+				var to := _to_stage(_bun_spot(p["spot"]))
+				s.position = at.lerp(to, smoothstep(0.0, 1.0, k)) 					+ Vector2(0, -THROW_H * sin(PI * k)) / _stage.scale.x
+				s.scale = Vector2.ONE * lerpf(1.0, bun_patty_scale, k)
 				s.texture = _frames["flip_patty"][_flip_frame(u, p["dur"])]
-				if u >= p["dur"]:
+				p["mat"].set_shader_parameter("raw", 1.0 - clampf(u / p["dur"], 0.0, 1.0))
+				if p.has("critter") and vis >= p["critter"]["catch_t"]:
+					p["state"] = "carried"         # the flying squirrel got it
+					s.texture = _frames["flip_patty"][0]
+				elif u >= p["dur"]:
 					_land(p, vis)
-			"cooked":
-				var u: float = vis - p["t0"]
-				p["mat"].set_shader_parameter("raw", 1.0 - clampf(u / COOK_S, 0.0, 1.0))
-				s.position = at
-				if u >= LEAVE_AFTER:
-					p["state"] = "leave"
-					p["t0"] = vis
-			"leave":   # a hop over onto the picnic table, shrinking and fading as it goes
-				var k := clampf((vis - p["t0"]) / LEAVE_S, 0.0, 1.0)
-				var to := _to_stage(table_drop)
-				s.position = at.lerp(to, k) + Vector2(0, -160.0 * sin(PI * k))
-				s.scale = Vector2.ONE * lerpf(1.0, 0.6, k)
-				s.rotation = -TAU * 0.5 * k
-				s.modulate.a = 1.0 - smoothstep(0.6, 1.0, k)
-				if k >= 1.0:
-					p["state"] = "gone"
+			"bun":     # sitting on its bun; its critter is on the way
+				s.position = _to_stage(_bun_spot(p["spot"]))
+				if vis >= p["critter"]["catch_t"]:
+					p["state"] = "carried"
+					s.z_index = 2
+			"carried": # in a critter's mouth (_drive_critters moves it)
+				pass
 			"burnt":
 				var u: float = vis - p["t0"]
 				s.position = at
@@ -617,14 +667,139 @@ func _flip_frame(u: float, dur: float) -> int:
 	return roundi(lerpf(FLIP_TOP, FLIP_LAND, clampf((u - up) / (dur - up), 0.0, 1.0)))
 
 
+func _bun_spot(i: int) -> Vector2:
+	if bun_spots.is_empty():
+		return patty_spots[i]
+	return bun_spots[clampi(i, 0, bun_spots.size() - 1)]
+
+
+## The patty lands on its bun. Anything still on that bun is taken first.
 func _land(p: Dictionary, vis: float) -> void:
-	p["state"] = "cooked"
+	p["state"] = "bun"
 	p["t0"] = vis
+	p["mat"].set_shader_parameter("raw", 0.0)
 	var s: Sprite2D = p["sprite"]
 	s.texture = _frames["flip_patty"][0]
+	s.scale = Vector2.ONE * bun_patty_scale
+	s.position = _to_stage(_bun_spot(p["spot"]))
 	s.z_index = 0
-	_play("sizzle", -14.0)
-	_add_fx("steam", patty_spots[p["spot"]])
+	_play("bun", -6.0)
+	_send_critter(p, vis)
+
+
+# --- critters steal the burgers -----------------------------------------------------
+# Each burger gets the next steal in STEALS. A critter comes in (STEAL_BEATS[0]),
+# grabs the burger at `catch_t`, and leaves with it in its mouth (STEAL_BEATS[1]).
+# Most come once the burger is on its bun; the flying squirrel is sent at your
+# press so it can catch the patty mid-flip. Art slots: art/grilling/critters/.
+
+## Pick patty `p`'s steal (on your press). The flying squirrel sets off now; the
+## others wait for the burger to land on its bun (`_send_critter`).
+func _pick_steal(p: Dictionary) -> void:
+	p["steal"] = STEALS[_steal_n % STEALS.size()]
+	_steal_n += 1
+	if p["steal"] == "flying_squirrel":
+		_add_critter(p, "flying_squirrel", p["t0"] + FLY_CATCH * Conductor.seconds_per_beat)
+
+
+func _send_critter(p: Dictionary, vis: float) -> void:
+	if p.has("critter"):
+		return
+	var kind: String = p.get("steal", STEALS[0])
+	_add_critter(p, kind, vis + STEAL_BEATS[kind][0] * Conductor.seconds_per_beat)
+
+
+func _add_critter(p: Dictionary, kind: String, catch_t: float) -> void:
+	var spb := Conductor.seconds_per_beat
+	var c := {"kind": kind, "patty": p, "catch_t": catch_t,
+		"t0": catch_t - STEAL_BEATS[kind][0] * spb, "end_t": catch_t + STEAL_BEATS[kind][1] * spb,
+		"at": _bun_spot(p["spot"]), "pos": Vector2(-1000, -1000), "face": 1.0, "alpha": 1.0}
+	p["critter"] = c
+	_critters.append(c)
+
+
+## Where the patty you see is right now (screen px). In the flip drawing it moves
+## around inside its frame, so this adds that frame's offset.
+func _patty_screen(p: Dictionary) -> Vector2:
+	var s: Sprite2D = p["sprite"]
+	var i: int = _frames["flip_patty"].find(s.texture)
+	var off: Vector2 = _frame_c[i] if i >= 0 else Vector2.ZERO
+	return _stage.position + (s.position + off * s.scale) * _stage.scale.x
+
+
+## Every critter's spot this frame. u: 0..1 coming in (1 = the grab),
+## v: 0..1 leaving. A carried burger rides in its mouth.
+func _drive_critters(vis: float) -> void:
+	for c in _critters:
+		var b: Vector2 = c["at"]
+		var u := clampf((vis - c["t0"]) / (c["catch_t"] - c["t0"]), 0.0, 1.0)
+		var v := clampf((vis - c["catch_t"]) / (c["end_t"] - c["catch_t"]), 0.0, 1.0)
+		var leaving: bool = vis >= c["catch_t"]
+		var k := v if leaving else u
+		var pos := b
+		var face := 1.0
+		var alpha := 1.0
+		match c["kind"]:
+			"squirrel":          # scurries in from the left along the table, scurries back
+				var from := Vector2(critter_exit_x, b.y)
+				pos = b.lerp(from, k * k) if leaving else from.lerp(b, 1.0 - (1.0 - k) * (1.0 - k))
+				pos.y -= 6.0 * absf(sin(k * PI * 6.0))
+				face = -1.0 if leaving else 1.0
+			"rabbit":            # three hops in, three hops out
+				var from := Vector2(critter_exit_x, b.y)
+				pos = b.lerp(from, k) if leaving else from.lerp(b, k)
+				pos.y -= 55.0 * absf(sin(k * PI * 3.0))
+				face = -1.0 if leaving else 1.0
+			"flying_squirrel":   # swoops down from the top left onto the patty, then off right and up
+				var p: Dictionary = c["patty"]
+				if not leaving:
+					var meet: Vector2 = _patty_screen(p) if is_instance_valid(p["sprite"]) else b
+					c["meet"] = meet
+					pos = Vector2(-100, -80).lerp(meet, u) + Vector2(0, 60.0 * sin(u * PI))
+				else:
+					pos = (c.get("meet", b) as Vector2).lerp(Vector2(VP.x + 140, -120), v * v)
+			"raccoon":           # up from under the table, grab, back down
+				var under := b + Vector2(0, 150)
+				pos = b.lerp(under, k * k) if leaving else under.lerp(b, 1.0 - (1.0 - k) * (1.0 - k))
+				alpha = clampf((1.0 - k) * 4.0, 0.0, 1.0) if leaving else clampf(k * 4.0, 0.0, 1.0)
+			"mi_squirrel":       # down on a rope from the sky, yanked back up
+				var top := Vector2(b.x, -110)
+				pos = b.lerp(top, k * k) if leaving else top.lerp(b, 1.0 - pow(1.0 - k, 3.0))
+		c["pos"] = pos
+		c["face"] = face
+		c["alpha"] = alpha
+		var pt: Dictionary = c["patty"]
+		if leaving and pt["state"] == "carried" and is_instance_valid(pt["sprite"]):
+			var s: Sprite2D = pt["sprite"]
+			s.z_index = 2
+			s.position = _to_stage(pos)
+			s.scale = Vector2.ONE * bun_patty_scale
+			s.modulate.a = alpha
+		if vis >= c["end_t"]:
+			pt["state"] = "gone"
+	_critters = _critters.filter(func(c): return vis < c["end_t"])
+
+
+## The critters (labelled placeholder boxes until you draw them), facing the way they go.
+func _draw_critters() -> void:
+	var l := _critter_layer
+	for c in _critters:
+		if Conductor.visual_position < c["t0"]:
+			continue
+		var pos: Vector2 = c["pos"]
+		if c["kind"] == "mi_squirrel":     # the rope
+			l.draw_line(Vector2(pos.x, -10), pos + Vector2(0, -70), Color(INK, 0.8), 3.0)
+		l.draw_set_transform(pos, 0.0, Vector2(c["face"], 1.0))
+		var box: Rect2 = ART[c["kind"]][1]
+		var tex := _tex(c["kind"])
+		var a: float = c["alpha"]
+		if tex:
+			var k := minf(box.size.x / tex.get_width(), box.size.y / tex.get_height())
+			var sz := Vector2(tex.get_width(), tex.get_height()) * k
+			l.draw_texture_rect(tex, Rect2(box.get_center() - sz * 0.5, sz), false, Color(1, 1, 1, a))
+		else:
+			_placeholder(l, box, c["kind"], a, 1.0)
+		l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## Your tongs: the flip at a patty's spot while one is going, else the ready pose
@@ -654,6 +829,13 @@ func _drive_tongs(vis: float, dt: float) -> void:
 
 # --- input -------------------------------------------------------------------------
 
+## S on a computer, the Skip button on a phone.
+func _skip_practice() -> void:
+	if _phase != Phase.SONG:
+		_practice_passed = true
+		_start_song()
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	var button: bool = (e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_SPACE) \
 		or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
@@ -674,9 +856,7 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		match e.keycode:
 			KEY_S:
-				if _phase != Phase.SONG:
-					_practice_passed = true
-					_start_song()
+				_skip_practice()
 			KEY_R:
 				_restart()
 			KEY_ESCAPE:
@@ -716,6 +896,7 @@ func _hit(a: Dictionary, err: float) -> void:
 		tong_dur = clampf(_answers[0]["time"] - a["time"] - 0.03, FLIP_MIN, p["dur"])
 	(p["sprite"] as Sprite2D).z_index = 2
 	_flip = {"patty": p, "t0": p["t0"], "dur": tong_dur}
+	_pick_steal(p)
 	_play("flip", -2.0)
 	var cyc: Variant = a["cyc"]
 	if cyc != null:
@@ -784,6 +965,8 @@ func _draw_back() -> void:
 		l.draw_texture_rect(tex, Rect2(table_rect.get_center() - sz * 0.5, sz), false)
 	else:
 		_placeholder(l, table_rect, "picnic_table", 1.0, 1.0)
+	for b in bun_spots:
+		_draw_art(l, "bun", b, 1.0)
 	for season in ["salt", "pepper"]:
 		var p: Vector2 = salt_pos if season == "salt" else pepper_pos
 		var pts := PackedVector2Array()
@@ -907,36 +1090,19 @@ func _draw_practice(l: Node2D, font: Font) -> void:
 	l.draw_string(font, Vector2(VP.x - 120, VP.y - 8), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 110, 14, Color(INK, 0.45))
 
 
-## Practice shots: a short caption, then a TAP box with a square closing in on
-## it that wraps the key exactly when the next burger should be flipped. While a
-## burger waits for you, the square pulses.
-func _draw_shots(l: Node2D, font: Font) -> void:
+## Practice shots: the caption, TAP box and closing square (TutorialUI -- the
+## same boxes in the same spot in every level). While a burger waits for you,
+## the square pulses.
+func _draw_shots(l: Node2D, _font: Font) -> void:
 	var head := "Try again!" if _shot_retry else "Practice  %d/%d" % [_shot_step + 1, SHOT_PATTERNS.size()]
-	var sub := "Sizzle?  Flip it!" if _shot_step == 0 else "Two sizzles?  Flip both, same rhythm!"
-	_caption(l, font, sub, head)
-	var c: Vector2 = (patty_spots[0] if not patty_spots.is_empty() else VP / 2.0) + Vector2(-40, -150)
+	var sub := "Sizzle?  Flip it!" if _shot_step == 0 else "Two sizzles?  Flip both!"
+	TutorialUI.caption(l, head, sub)
+	TutorialUI.skip_hint(l)
 	var live := not _answers.is_empty()
-	var cap := Rect2(c - Vector2(62, 24), Vector2(124, 48))
-	var hot := Color(0.95, 0.55, 0.15)
-	l.draw_rect(cap.grow(4), hot if live else Color(hot, 0.4))
-	l.draw_rect(cap, Color(1, 0.97, 0.88, 1.0 if live else 0.5))
-	l.draw_string(font, Vector2(cap.position.x, cap.position.y + 33), "TAP", HORIZONTAL_ALIGNMENT_CENTER, cap.size.x, 26, Color(INK, 1.0 if live else 0.5))
-	l.draw_string(font, Vector2(VP.x - 120, VP.y - 8), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 110, 14, Color(INK, 0.45))
-	if not live:
-		return
-	var hug := Vector2(72, 34)         # the square's half-size when it wraps the TAP box
-	if _shot_frozen:
-		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 2.0)
-		var hh := hug + Vector2(6, 6) * pulse
-		l.draw_rect(Rect2(c - hh, hh * 2.0), hot, false, 6.0)
-		return
-	var lead := 2.0 * Conductor.seconds_per_beat   # shows up 2 beats ahead
-	var left: float = _answers[0]["time"] + Conductor.input_offset - Conductor.visual_position
-	if left > lead or left < -GOOD:
-		return
-	var k := clampf(left / lead, 0.0, 1.0)
-	var h := hug + Vector2(130, 130) * k
-	l.draw_rect(Rect2(c - h, h * 2.0), Color(hot, 1.0 - 0.6 * k), false, lerpf(7.0, 3.0, k))
+	TutorialUI.tap_box(l, live)
+	if live:
+		TutorialUI.square(l, _answers[0]["time"] + Conductor.input_offset - Conductor.visual_position,
+			_shot_frozen, GOOD)
 
 
 ## One bar as a timeline: a faded lead-in ("4 &" of the bar before, STRIP_LEAD

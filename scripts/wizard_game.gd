@@ -138,6 +138,7 @@ var _next_player := 0
 var _font: Font
 var _stars: Array[Vector3] = []
 
+var _skip_btn: Button               ## phone: the Skip button during practice (null on a computer)
 var _phase := Phase.CARD
 var _song_stream: AudioStream      ## the level's song (the demo runs on a click track instead)
 var _demo_end := 0.0               ## song time the practice shot is judged
@@ -164,6 +165,7 @@ var _pause: PauseMenu
 
 func _ready() -> void:
 	_pause = PauseMenu.attach(self, _start)   # Esc: Continue / Retry / Quit
+	_skip_btn = TutorialUI.add_skip_button(self, _skip_practice)   # phone only
 	_results = Results.new()
 	add_child(_results)
 	_font = ThemeDB.fallback_font
@@ -179,6 +181,7 @@ func _ready() -> void:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
+	_play("cast_ice", -4.0)            # entering the level: the sound your press makes
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 42
 	for i in 90:
@@ -596,6 +599,12 @@ func _on_song_finished() -> void:
 		_start_demo(_demo_step)
 
 
+## SPACE on a computer, the Skip button on a phone.
+func _skip_practice() -> void:
+	if _phase == Phase.DEMO:
+		_start()
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		match e.keycode:
@@ -789,6 +798,8 @@ func _miss() -> void:
 # --- clock -----------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
+	if _skip_btn:
+		_skip_btn.visible = _phase == Phase.DEMO
 	if _frozen:
 		_hold_frozen_ball()
 	elif _phase == Phase.DEMO and not _balls.is_empty() and _balls[0].get("hold", false) and _balls[0]["state"] == "fly" and Conductor.visual_position >= _balls[0]["arrive_v"]:
@@ -872,14 +883,17 @@ func _draw() -> void:
 		_draw_hud()
 	if _phase == Phase.DEMO:
 		# on the dark ground, clear of the ball's flight and the burst in the sky
+		# the same caption box, in the same spot, as every level (TutorialUI)
 		var head := "Try again!" if _demo_retry else ("Practice  1/2" if _demo_step == 0 else "Practice  2/2")
-		_text(head, Vector2(660, 474), 36, Color.WHITE, true, 1.0)
+		var touch := TutorialUI.is_touch()
 		if _demo_step == 0:
-			_text("Fireball? Tap the LEFT side!", Vector2(660, 510), 24, COL["ice"], true, 1.0)
+			TutorialUI.caption(self, head, "Fireball? Tap the LEFT side!" if touch else "Fireball? Press A for ICE!",
+				COL["ice"].darkened(0.25))
 		else:
-			_text("Iceball? Tap the RIGHT side!", Vector2(660, 510), 24, COL["fire"], true, 1.0)
+			TutorialUI.caption(self, head, "Iceball? Tap the RIGHT side!" if touch else "Iceball? Press D for FIRE!",
+				COL["fire"].darkened(0.2))
 		_draw_key_prompt(v)
-		_text("SPACE to skip", Vector2(576, VP.y - 44), 16, Color(1, 1, 1, 0.5), true)
+		TutorialUI.skip_hint(self, "SPACE: skip", Color(1, 1, 1, 0.55))   # light on the dark ground
 	elif _phase == Phase.CARD:
 		_draw_card()
 		if Time.get_ticks_msec() / 1000.0 - _rec_msg_t < 6.0:
@@ -1072,8 +1086,11 @@ func _draw_wall() -> void:
 
 
 func _draw_hud() -> void:
-	_text("tap left: ICE", Vector2(330, VP.y - 22), 18, COL["ice"])
-	_text("tap right: FIRE", Vector2(VP.x - 160, VP.y - 22), 18, COL["fire"])
+	# a phone taps the screen halves; a computer presses A / D. The two labels
+	# mirror each other (clear of the skip hint in the corner).
+	var touch := TutorialUI.is_touch()
+	_text("tap left: ICE" if touch else "A: ICE", Vector2(380, VP.y - 22), 18, COL["ice"], true)
+	_text("tap right: FIRE" if touch else "D: FIRE", Vector2(VP.x - 380, VP.y - 22), 18, COL["fire"], true)
 
 
 ## Record mode: one row per pattern (its call bar), with the taps on a 4-beat strip.
@@ -1116,42 +1133,24 @@ func _draw_record() -> void:
 	_text("A = throw ICE    D = throw FIRE    Z undo    R start over    Enter save", Vector2(576, VP.y - 22), 18, Color(1, 1, 1, 0.85), true)
 
 
-## Practice: the key to press, with a square closing in on it that wraps the key
-## exactly when the ball arrives (press then). While the ball waits, the square pulses.
+## Practice: the press box (A / D on a computer, TAP on a phone) with a box closing in on it that wraps it exactly
+## when the ball arrives (press then). While the ball waits, the square pulses.
+## Same box, same height as every level (TutorialUI), but it sits over the half of
+## the screen you tap: left for ICE, right for FIRE (the right one lines up with
+## the other levels' TAP box).
 func _draw_key_prompt(v: float) -> void:
 	if _balls.is_empty():
 		return
 	var b: Dictionary = _balls[0]
 	var col: Color = COL["ice"] if _demo_step == 0 else COL["fire"]
-	# ICE is the left half of the screen, FIRE the right half: the TAP sits in the
-	# middle of the half you tap, and that half glows.
-	var c := Vector2(VP.x * (0.25 if _demo_step == 0 else 0.75), 230)
+	var c := TutorialUI.tap_at
+	if _demo_step == 0:
+		c.x = VP.x - c.x               # the mirror spot on the left half
 	var live: bool = b["state"] == "fly"
+	var key := "A" if _demo_step == 0 else "D"     # on a phone: TAP
+	TutorialUI.tap_box(self, live, c, col, key)
 	if live:
-		var half := Rect2(0.0 if _demo_step == 0 else VP.x * 0.5, 0.0, VP.x * 0.5, VP.y)
-		draw_rect(half, Color(col, 0.08))
-	var cap := Rect2(c - Vector2(48, 28), Vector2(96, 56))
-	draw_rect(cap.grow(4), col if live else Color(col, 0.4))
-	draw_rect(cap, Color(1, 0.97, 0.88, 1.0 if live else 0.5))
-	_text("TAP", c + Vector2(0, 11), 30, Color(INK, 1.0 if live else 0.5), true)
-	if not live:
-		return
-	const HUG := 60.0                  # half-size of the square when it wraps the TAP
-	if _frozen:
-		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 2.0)
-		_square(c, HUG + 6.0 * pulse, col, 6.0)
-		return
-	var lead := 2.0 * Conductor.seconds_per_beat   # the square shows up 2 beats ahead
-	var left: float = b["arrive_v"] - v
-	if left > lead or left < -GOOD:
-		return
-	var k := clampf(left / lead, 0.0, 1.0)
-	_square(c, lerpf(HUG, 170.0, k), Color(col, 1.0 - 0.6 * k), lerpf(7.0, 3.0, k))
-
-
-## Outline of a square centred on c, `half` from the centre to each side.
-func _square(c: Vector2, half: float, col: Color, width: float) -> void:
-	draw_rect(Rect2(c - Vector2(half, half), Vector2(half, half) * 2.0), col, false, width)
+		TutorialUI.square(self, b["arrive_v"] - v, _frozen, GOOD, c, col, key)
 
 
 func _draw_card() -> void:

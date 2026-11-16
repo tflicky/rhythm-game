@@ -536,3 +536,65 @@ to start / tap to play again; a "II" pause button in the corner (no Esc on a pho
 calibration has a Skip button. *"i only have an iphone"*, and iPhone apps can only be
 built on a Mac, so there's now a Web export (single-threaded, for Safari) to put on
 itch.io as a private draft and play in the browser.
+
+## Burger thieves, a fresh menu with gold stars, and tutorials that match (Nov 16)
+
+**Grill Master: the burgers go somewhere now.** *"i want to fix the grill game, Im
+thinkin the player flips the the burger into burger buns which then bunnys and squirrels
+come by and jump up to catch them in their mouth"*. A flip now tosses the patty off the
+grill (my grab-and-toss drawing), browning in the air, straight onto one of four buns
+waiting on the picnic table (*"it goes straight onto a bun on the table, and im going to
+add a couple variations of how the animals steal the food from the table"*).
+
+Then a critter steals it. My five ideas, in order, one per burger:
+1. a squirrel scurries in along the table, grabs it and runs off
+2. a rabbit hops in and takes it
+3. a flying squirrel swoops in and catches it **mid-air**, before it reaches the bun
+4. a raccoon climbs up from under the table and grabs it
+5. a Mission Impossible squirrel drops down on a rope from the sky and gets yanked back up
+
+The song has 54 burgers, so each steal plays about 11 times. They're all labelled
+placeholder boxes until I draw them (`art/grilling/critters/`, plus `scene/bun.png`);
+`bun` is a new silent sound slot.
+
+**What broke:** the first toss arc went off the top of the screen, so the flying
+squirrel caught the patty where you couldn't see it. Lowered the arc and moved the catch
+later in the fall.
+
+**Juggling is gone.** *"get rid of the juggle game"*. Scene, script, icon tool and folders
+removed (still in git history).
+
+**Main menu, freshened.** Three big cards side by side with my icons on a light disc; the
+picked card lifts, gets an outline and pops on the beat, and the icons bob. There's a slot
+for a menu song I'll make (`audio/music/menu.wav`, tempo in `MENU_BPM`). The background
+took a few tries: dark polka dots and a shadowed title *"make it harder to see"*, white
+dots *"the colors dont feel like they work lets jsut have a gradiant"*. It's a plain
+cream-to-peach gradient now.
+
+**Gold stars.** *"if the player gets a perfect score on a level give them a gold star put
+in the corner of their box"*. 100% on any level saves a star (per computer, next to the
+timing calibration) and the menu card gets a gold star in its corner that sways on the
+beat. Slot for my own star: `art/menu/star.png`.
+
+**Entering a level.** *"when you enter the level can you play the sound effect it makes
+when you click a button ... also fade to black and fade back in"*. The menu fades to black
+and back in, and each level plays its press sound as it appears: the catch, the tongs
+click-click, the ice spell.
+
+**Tutorials that match.** *"the boxes for the tutorials arent lined up correctly"*. All
+three levels had the same steps but drew their boxes in different places. Now one shared
+file (`scripts/tutorial_ui.gd`) draws them in the Monkey Business layout for every level.
+Then:
+- *"the enclosing box should match the shape of the tap box"*: it's a wide box now, not a square.
+- *"I dont like the blue overlay for the wizard level"*: removed.
+- *"on computer its a space bar but on phone it asks you to tap the screen"*: the box says
+  SPACE (or A / D in Wizard) on a computer and TAP on a phone. The Wizard hints switch too.
+- *"theres no way to make it different on computer vs phone?"*: skipping practice is
+  S / SPACE on a computer and a Skip button on a phone.
+
+**Drag mode.** *"is there a way I can drag and move where i want these UI to be"*. Press
+**F3** in any level, drag the caption, press box and skip spot, F3 again to save them into
+`tutorial_ui.gd`.
+
+**What broke:** deleting the dot colour joined two lines in the menu script and it
+wouldn't load for a moment; fixed.

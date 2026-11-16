@@ -28,3 +28,17 @@ static func set_input_offset(seconds: float) -> void:
 	cfg.load(PATH)   # keep any other keys; a missing file is fine
 	cfg.set_value("timing", "input_offset", seconds)
 	cfg.save(PATH)
+
+
+## Levels you've finished with 100% (every press landed), by scene path --
+## the menu gives each one a gold star.
+static func is_perfect(scene: String) -> bool:
+	var cfg := ConfigFile.new()
+	return cfg.load(PATH) == OK and bool(cfg.get_value("perfect", scene, false))
+
+
+static func set_perfect(scene: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(PATH)   # keep any other keys; a missing file is fine
+	cfg.set_value("perfect", scene, true)
+	cfg.save(PATH)

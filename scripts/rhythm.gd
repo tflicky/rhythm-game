@@ -46,6 +46,7 @@ enum Phase { DEMO, PRACTICE, TRANSITION, SONG, SHOT, CARD }
 @onready var recorder: Node2D = $ChartRecorder
 
 var _cues: Array = []
+var _skip_btn: Button               ## phone: the Skip button during practice (null on a computer)
 var _phase := Phase.SONG
 var _practice_passed := false   ## once passed, R replays the song without practice
 var _song_stream: AudioStream
@@ -64,6 +65,7 @@ var _pause: PauseMenu
 
 func _ready() -> void:
 	_pause = PauseMenu.attach(self, _restart)   # Esc: Continue / Retry / Quit
+	_skip_btn = TutorialUI.add_skip_button(self, _skip_practice)   # phone only
 	Conductor.stream_player = audio
 	_song_stream = audio.stream
 
@@ -177,6 +179,8 @@ func _queue_shot(step: int, retry: bool) -> void:
 
 
 func _process(_dt: float) -> void:
+	if _skip_btn:
+		_skip_btn.visible = _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION, Phase.SHOT]
 	if _phase != Phase.SHOT or _shot_next_at < 0.0 or Conductor.song_position < _shot_next_at:
 		return
 	_shot_next_at = -1.0
@@ -296,6 +300,13 @@ func _on_song_finished() -> void:
 		game.begin(_practice_cues())
 
 
+## S on a computer, the Skip button on a phone.
+func _skip_practice() -> void:
+	if _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION, Phase.SHOT, Phase.CARD]:
+		_practice_passed = true
+		_start_song()
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	# a tap / click / SPACE on the title card starts the song; on the results, plays again
 	var tap: bool = e.is_action_pressed("ui_accept") \
@@ -313,9 +324,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			_restart()
 		KEY_S:
 			# skip practice (S is the recorder's save key in RECORD mode -- phase is SONG there)
-			if _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION, Phase.SHOT, Phase.CARD]:
-				_practice_passed = true
-				_start_song()
+			_skip_practice()
 		KEY_ESCAPE:
 			if game._finished:          # results screen: straight to the menu
 				get_tree().change_scene_to_file("res://MainMenu.tscn")

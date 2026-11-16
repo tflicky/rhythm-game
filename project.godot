@@ -23,6 +23,8 @@ driver/output_latency.web=25
 [autoload]
 
 Conductor="*res://scripts/conductor.gd"
+Transition="*res://scripts/transition.gd"
+TutorialEditor="*res://scripts/tutorial_editor.gd"
 
 [display]
 
