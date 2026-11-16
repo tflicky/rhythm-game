@@ -19,7 +19,10 @@ const VP := Vector2(1152, 648)
 const PERFECT := 0.075
 const GOOD := 0.15
 const MISS_TAIL := 0.03
+const EARLY := 0.3                 ## no spamming: a press this long before a ball (too early to hit it) wrecks it
+const BOTH_AT_ONCE := 0.08         ## ICE and FIRE pressed this close together: the hit doesn't count
 const TRAVEL_BEATS := 4.0          ## launch -> hit: exactly one bar later, same rhythm
+const REC_END_LEEWAY := 0.75     ## record mode: a tap up to this many beats past the end of a call bar sticks to its last spot
 ## Flight: one arc from the enemy tower to the burst point, all on screen. The ball
 ## shoots up fast, hangs near the top of the sky (small and far away), then swoops
 ## at you, growing as it comes. Each beat of the bar gets its own lane across the
@@ -50,9 +53,22 @@ const DEMO_PATTERN_BARS := 2       ## the demo goes straight call, answer, call,
 ## Play the placeholder demo song instead of Wizard_Song.wav (to try the
 ## full-band call bar / thin answer bar idea). Untick to go back to your song.
 @export var use_demo_song := false
-## Before the title card, show how it's played: the tower lobs one fireball and
-## your wand freezes it with ice, by itself. SPACE skips straight into the game.
+## Before the title card, two practice shots over a click track: a fireball you
+## freeze with ICE (A), then an iceball you melt with FIRE (D). Each repeats until
+## you get it. SPACE skips straight into the game.
 @export var show_demo := true
+## Play the calls from your Call MIDI (audio/music/wizard_call.mid) instead of the
+## PATTERNS list. Low notes (below E3) are fire balls, E3 and up are ice balls.
+## Each note is answered 1 bar + answer_delay beats later, in the same rhythm (from my
+## "where the response should be" MIDI: 1 bar + 1 1/3 beats). A call too long to
+## finish first is answered whole bars later. Replace the file with a new export from
+## your DAW to change the calls.
+@export var use_call_midi := true
+const CALL_MIDI := "res://audio/music/wizard_call.mid"
+const CALL_FIRE_BELOW := 52        ## MIDI note E3: notes below it are fire, E3 and up are ice
+const CALL_PHRASE_GAP := 4.0       ## more than this many beats between notes starts a new call
+## Call MIDI: beats after the next bar's matching beat that the answer lands (4/3 = 1 1/3 beats).
+@export_range(0.0, 3.99, 0.001) var answer_delay := 4.0 / 3.0
 ## Record mode (F2): taps snap to this grid. Triplet = thirds of a beat.
 @export_enum("Off:0", "Quarter:1", "Eighth:2", "Triplet:3", "Sixteenth:4") var record_snap: int = 2
 
@@ -97,6 +113,9 @@ const FADE := 0.1
 const BOX := {"wand": Vector2(452, 1775), "fireball": Vector2(1695, 469),
 	"iceball": Vector2(1695, 469), "firespell": Vector2(388, 551), "icespell": Vector2(388, 566),
 	"gnome": Vector2(0, 1772), "gnome_hands": Vector2(609, 2115)}
+const PRACTICE_CLICK_BEATS := 256  ## practice metronome length (about 2 1/2 minutes at 110 BPM)
+const WALK_IN := 3.0               ## seconds the gnome takes to walk up to his spot when the game starts
+const WALK_FROM := Vector2(-330, 240)  ## where he walks in from (screen px, bottom left)
 const EYES_SHUT_CAST := 0.18       ## gnome squeezes its eyes shut (gnome_1) this long per cast
 const EYES_SHUT_HURT := 0.35       ## ...and this long when a ball gets through
 
@@ -121,12 +140,18 @@ var _stars: Array[Vector3] = []
 
 var _phase := Phase.CARD
 var _song_stream: AudioStream      ## the level's song (the demo runs on a click track instead)
-var _demo_end := 0.0               ## song time the demo hands over to the title card
+var _demo_end := 0.0               ## song time the practice shot is judged
+var _demo_step := 0                ## 0 = fireball (press ICE), 1 = iceball (press FIRE)
+var _demo_retry := false           ## the last try missed: show "Try again!"
+var _demo_fails := 0               ## misses on this practice shot; after 2 the ball waits for you
+var _frozen := false               ## practice: the ball is held at the burst point until you press
+var _freeze_v := 0.0
 var _balls: Array = []             ## { kind, launch_t, hit_t, arrive_v, state, ... }
 var _spells: Array = []            ## { kind, t0, impact, fizzle }
 var _pops: Array = []              ## { text, col, t0 } grade text by the burst
 var _scars: Array = []             ## { kind, x } scorch / frost marks on your wall
 var _cast_v := -10.0               ## visual time of the last cast (wand recoil)
+var _last_cast := {}               ## { kind, t, ball, grade, spell } for the both-buttons check
 var _hurt := {}                    ## { kind, v } last hit you took (flash + shake)
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
 var _results: Results          ## the counting-up percent on the results screen
@@ -179,27 +204,43 @@ func _ready() -> void:
 		_start_demo()
 
 
-## The "watch" demo: a click track, one fireball launched after a bar of clicks,
-## frozen with ice exactly on the beat a bar later, then the title card.
-func _start_demo() -> void:
-	Conductor.stop()
+## Practice shots: a click track, one ball launched after a bar of clicks that you
+## blast a bar later. Step 0 is a fireball (ICE), step 1 an iceball (FIRE); a miss
+## repeats the step, and after both comes the title card.
+func _start_demo(step := 0, retry := false) -> void:
+	_demo_step = step
+	_demo_retry = retry
+	if retry:
+		_demo_fails += 1
+	else:
+		_demo_fails = 0
+	_unfreeze()
 	_balls.clear()
-	_spells.clear()
 	_pops.clear()
 	_hurt = {}
-	_phase = Phase.DEMO
-	audio.stream = ClickTrack.make(Conductor.bpm, 16, Conductor.beats_per_measure, Conductor.first_beat_offset)
-	audio.volume_db = -8.0
 	var launch_beat := 4.0
+	if _phase == Phase.DEMO and Conductor.playing:
+		# the metronome keeps going: the next shot goes up on the next downbeat
+		launch_beat = ceilf((Conductor.song_position_in_beats + 1.0) / 4.0) * 4.0
+	else:
+		Conductor.stop()
+		_spells.clear()
+		_cast_v = -10.0
+		_phase = Phase.DEMO
+		audio.stream = ClickTrack.make(Conductor.bpm, PRACTICE_CLICK_BEATS, Conductor.beats_per_measure, Conductor.first_beat_offset)
+		audio.volume_db = -8.0
+		Conductor.play()
 	var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
-	_balls.append({"kind": "fire", "launch_t": Conductor.time_of_beat(launch_beat),
+	_balls.append({"kind": "fire" if step == 0 else "ice", "launch_t": Conductor.time_of_beat(launch_beat),
 		"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset,
 		"lane": 0.0, "state": "fly", "launched": false, "impact": -1.0, "burst_sfx": null, "hurt": false})
-	_demo_end = hit_t + 1.6
-	Conductor.play()
+	_balls[0]["hold"] = _demo_fails >= 2   # 3rd try: it stops and waits for the right button
+	_demo_end = hit_t + 1.4
 
 
 func _end_demo() -> void:
+	_unfreeze()
+	_cast_v = -10.0
 	Conductor.stop()
 	_balls.clear()
 	_spells.clear()
@@ -242,6 +283,8 @@ func _c2s(p: Vector2) -> Vector2:
 # --- flow ------------------------------------------------------------------------
 
 func _start() -> void:
+	_unfreeze()
+	_cast_v = -10.0
 	Conductor.stop()
 	audio.stream = _song_stream
 	audio.volume_db = 0.0
@@ -253,17 +296,134 @@ func _start() -> void:
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	if _results:
 		_results.reset()
-	var bar := _first_call_bar
-	for pat in _patterns_that_fit():
-		for n in pat:
-			var launch_beat: float = bar * 4 + float(n[0])
-			var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
-			_balls.append({"kind": n[1], "launch_t": Conductor.time_of_beat(launch_beat),
+	var chart := _call_chart() if use_call_midi else []
+	if not chart.is_empty():
+		for c in chart:
+			var hit_t := Conductor.time_of_beat(c["hit"])
+			_balls.append({"kind": c["kind"], "launch_t": Conductor.time_of_beat(c["beat"]),
 				"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset,
-				"lane": float(n[0]), "state": "fly", "launched": false, "impact": -1.0, "burst_sfx": null, "hurt": false})
-		bar += _pattern_bars
+				"lane": fposmod(c["beat"], 4.0), "state": "fly", "launched": false, "impact": -1.0, "burst_sfx": null, "hurt": false})
+	else:
+		var bar := _first_call_bar
+		for pat in _patterns_that_fit():
+			for n in pat:
+				var launch_beat: float = bar * 4 + float(n[0])
+				var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
+				_balls.append({"kind": n[1], "launch_t": Conductor.time_of_beat(launch_beat),
+					"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset,
+					"lane": float(n[0]), "state": "fly", "launched": false, "impact": -1.0, "burst_sfx": null, "hurt": false})
+			bar += _pattern_bars
 	_phase = Phase.PLAY
 	Conductor.play()
+
+
+## The calls from the Call MIDI: [{beat, kind, hit}], beats counted from the song's
+## first beat (DAW bar 1 beat 1 = 0). Notes with a gap of more than CALL_PHRASE_GAP
+## beats between them are separate calls. Each call is answered in the same rhythm,
+## 1 bar + answer_delay beats later; a call longer than that is answered whole bars
+## later still, so a call and its answer never overlap.
+func _call_chart() -> Array:
+	var notes := _read_midi_notes(CALL_MIDI)
+	var phrases := []
+	for n in notes:
+		if phrases.is_empty() or n[0] - phrases[-1][-1][0] > CALL_PHRASE_GAP:
+			phrases.append([])
+		phrases[-1].append(n)
+	var out := []
+	for ph in phrases:
+		var written := _written_response(ph)
+		if written >= 0.0:
+			# I wrote the response myself: the first half is the call, the second half
+			# its copy. Each ball is answered by that copy's (median) delay.
+			for i in ph.size() / 2:
+				var n: Array = ph[i]
+				out.append({"beat": n[0], "kind": "fire" if n[1] < CALL_FIRE_BELOW else "ice", "hit": n[0] + written})
+			continue
+		var shift := 4.0 + answer_delay
+		while ph[0][0] + shift <= ph[-1][0] + 0.01:   # still calling: wait another bar
+			shift += 4.0
+		for n in ph:
+			out.append({"beat": n[0], "kind": "fire" if n[1] < CALL_FIRE_BELOW else "ice", "hit": n[0] + shift})
+	return out
+
+
+## A phrase whose second half repeats its first half (same fire/ice order, each note
+## moved by about the same amount, starting after the call ends) has its response
+## written in the MIDI. Returns that delay in beats, or -1 if it's a call on its own.
+func _written_response(ph: Array) -> float:
+	if ph.size() < 2 or ph.size() % 2 != 0:
+		return -1.0
+	var half := ph.size() / 2
+	if ph[half][0] <= ph[half - 1][0]:
+		return -1.0
+	var shifts := []
+	for i in half:
+		if (ph[i][1] < CALL_FIRE_BELOW) != (ph[half + i][1] < CALL_FIRE_BELOW):
+			return -1.0
+		shifts.append(ph[half + i][0] - ph[i][0])
+	shifts.sort()
+	if shifts[-1] - shifts[0] > 0.25:
+		return -1.0
+	return (shifts[(half - 1) / 2] + shifts[half / 2]) / 2.0
+
+
+## Note-on events of a .mid file as [[beat, key], ...], sorted by time.
+static func _read_midi_notes(path: String) -> Array:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return []
+	var d := f.get_buffer(f.get_length())
+	if d.size() < 14 or d.slice(0, 4).get_string_from_ascii() != "MThd":
+		return []
+	var ntracks: int = (d[10] << 8) | d[11]
+	var div: int = (d[12] << 8) | d[13]
+	var pos := [8 + ((d[4] << 24) | (d[5] << 16) | (d[6] << 8) | d[7])]
+	var out := []
+	for _tr in ntracks:
+		var i: int = pos[0]
+		if i + 8 > d.size():
+			break
+		var end: int = i + 8 + ((d[i + 4] << 24) | (d[i + 5] << 16) | (d[i + 6] << 8) | d[i + 7])
+		pos[0] = i + 8
+		var t := 0
+		var run := 0
+		while pos[0] < end:
+			t += _vlq(d, pos)
+			var st: int = d[pos[0]]
+			if st == 0xFF:                  # meta event
+				pos[0] += 2
+				pos[0] += _vlq(d, pos)
+				continue
+			if st == 0xF0 or st == 0xF7:    # sysex
+				pos[0] += 1
+				pos[0] += _vlq(d, pos)
+				continue
+			if (st & 0x80) != 0:
+				run = st
+				pos[0] += 1
+			var ty := run & 0xF0
+			if ty == 0x90:
+				if d[pos[0] + 1] > 0:
+					out.append([float(t) / div, d[pos[0]]])
+				pos[0] += 2
+			elif ty == 0xC0 or ty == 0xD0:
+				pos[0] += 1
+			else:
+				pos[0] += 2
+		pos[0] = end
+	out.sort_custom(func(a, b): return a[0] < b[0])
+	return out
+
+
+static func _vlq(d: PackedByteArray, pos: Array) -> int:
+	var v := 0
+	while true:
+		var b: int = d[pos[0]]
+		pos[0] += 1
+		v = (v << 7) | (b & 0x7F)
+		if (b & 0x80) == 0:
+			return v
+	return v
 
 
 ## As many PATTERNS as the song has room for (each takes _pattern_bars bars; the
@@ -308,17 +468,24 @@ func _start_record() -> void:
 
 
 func _rec_tap(kind: String) -> void:
-	_play(kind, -2.0 if kind == "fire" else -8.0)    # the tower's throw sound
-	var beat := (Conductor.live_position() - Conductor.input_offset - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	var raw := (Conductor.live_position() - Conductor.input_offset - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	var beat := raw
 	if record_snap > 0:
-		beat = roundf(beat * record_snap) / record_snap
+		beat = roundf(raw * record_snap) / record_snap
+	var last_slot := 4.0 - (1.0 / record_snap if record_snap > 0 else 0.05)   # last grid spot in a bar
 	var rel := beat / 4.0 - _first_call_bar        # bars since the first call
 	var idx := floori(rel / _pattern_bars + 0.0001)
-	var in_bar := rel - idx * _pattern_bars
-	if idx < 0 or idx >= _rec.size() or in_bar >= 0.999:
+	var b := snappedf(maxf(rel - idx * _pattern_bars, 0.0) * 4.0, 0.001)   # beat within that bar
+	if b >= 3.999:
+		# Just past the end of the call bar: a late tap meant for the end of the bar.
+		# Within REC_END_LEEWAY beats it sticks to the bar's last spot instead of being lost.
+		var past := raw - ((_first_call_bar + idx * _pattern_bars) * 4 + 4.0)
+		if past < REC_END_LEEWAY:
+			b = last_slot
+	if idx < 0 or idx >= _rec.size() or b >= 3.999:
+		_play(kind, -2.0 if kind == "fire" else -8.0)
 		_rec_note("Tap during a CALL bar")
 		return
-	var b := snappedf(maxf(in_bar, 0.0) * 4.0, 0.001)
 	var pat: Array = _rec[idx]
 	var launch_beat: float = (_first_call_bar + idx * _pattern_bars) * 4 + b
 	for i in range(pat.size() - 1, -1, -1):
@@ -331,10 +498,16 @@ func _rec_tap(kind: String) -> void:
 	_rec_undo.append([idx, b])
 	# The ball really flies, and one bar later the wand answers it by itself,
 	# so you hear the whole call and response while you record.
+	# The throw sound: if the tap came a little before its beat, it waits and plays
+	# right on the beat (like in the game); otherwise it plays at once.
+	var launch_t := Conductor.time_of_beat(launch_beat)
+	var on_grid := Conductor.song_position < launch_t - AudioServer.get_output_latency()
+	if not on_grid:
+		_play(kind, -2.0 if kind == "fire" else -8.0)
 	var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
-	_balls.append({"kind": kind, "launch_t": Conductor.time_of_beat(launch_beat),
+	_balls.append({"kind": kind, "launch_t": launch_t,
 		"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset, "beat": launch_beat,
-		"lane": b, "state": "fly", "launched": true, "impact": -1.0, "burst_sfx": null, "hurt": false})
+		"lane": b, "state": "fly", "launched": not on_grid, "impact": -1.0, "burst_sfx": null, "hurt": false})
 
 
 func _drop_rec_ball(launch_beat: float) -> void:
@@ -370,6 +543,7 @@ func _save_record() -> void:
 		elif i < base.size():
 			out.append(base[i])
 	_patterns = out
+	use_call_midi = false              # play what you just recorded, not the Call MIDI
 	_phase = Phase.CARD
 	if _write_patterns(out):
 		_rec_note("Saved into wizard_game.gd!  SPACE to play them")
@@ -417,6 +591,9 @@ func _on_song_finished() -> void:
 		_save_record()
 	elif _phase == Phase.PLAY:
 		_phase = Phase.DONE
+	elif _phase == Phase.DEMO:           # the practice metronome ran out: start it again
+		_phase = Phase.CARD
+		_start_demo(_demo_step)
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -463,20 +640,37 @@ func _unhandled_input(e: InputEvent) -> void:
 		elif e.button_index == MOUSE_BUTTON_RIGHT:
 			_rec_tap("fire")
 	elif e is InputEventMouseButton and e.pressed:
+		# a tap / click: left half of the screen = ICE, right half = FIRE (phones too:
+		# touches arrive as left clicks). Right click is FIRE anywhere.
+		if _phase == Phase.CARD or _phase == Phase.DONE:
+			if e.button_index == MOUSE_BUTTON_LEFT:
+				_start()
+			return
 		if e.button_index == MOUSE_BUTTON_LEFT:
-			_cast("ice")
+			_cast("ice" if _tap_side(e) == "left" else "fire")
 		elif e.button_index == MOUSE_BUTTON_RIGHT:
 			_cast("fire")
+
+
+func _tap_side(e: InputEventMouseButton) -> String:
+	return "left" if e.position.x < get_viewport().get_visible_rect().size.x * 0.5 else "right"
 
 
 ## A spell fires every press. If a ball is inside the hit window, the spell
 ## flies to the burst point and lands exactly when the ball gets there.
 func _cast(kind: String, auto := false) -> void:
-	if not (_phase == Phase.PLAY or ((_phase == Phase.DEMO or _phase == Phase.RECORD) and auto)):
+	if not (_phase == Phase.PLAY or _phase == Phase.DEMO or (_phase == Phase.RECORD and auto)):
+		return
+	if _frozen and not _cast_frozen(kind):
 		return
 	var now := Conductor.live_position()
 	var v := now + Conductor.video_offset
 	_cast_v = v
+	if not auto and not _last_cast.is_empty() and kind != _last_cast["kind"] and now - _last_cast["t"] < BOTH_AT_ONCE:
+		_undo_both(_last_cast)       # mashing both spells: the hit is cancelled
+		_last_cast = {}
+		_play("cast_" + kind, -4.0)
+		return
 	var best := -1
 	var best_err := INF
 	for i in _balls.size():
@@ -488,8 +682,11 @@ func _cast(kind: String, auto := false) -> void:
 			best = i
 			best_err = err
 	var spell := {"kind": kind, "t0": v, "impact": -1.0}
+	var grade := ""
 	if best < 0:
 		_play("cast_" + kind, -4.0)
+		if not auto:
+			_wreck_early(now)          # pressed too early for the next ball: it gets through
 	else:
 		var b: Dictionary = _balls[best]
 		if b["kind"] == kind:          # same element just feeds it -- it gets through
@@ -498,7 +695,7 @@ func _cast(kind: String, auto := false) -> void:
 			_miss()
 			_play("cast_" + kind, -4.0)
 		else:
-			var grade := "Perfect" if absf(best_err) <= PERFECT else "Good"
+			grade = "Perfect" if absf(best_err) <= PERFECT else "Good"
 			b["state"] = "target"
 			spell["impact"] = maxf(v + 0.05, b["arrive_v"])
 			b["impact"] = spell["impact"]
@@ -506,6 +703,73 @@ func _cast(kind: String, auto := false) -> void:
 			_pops.append({"text": grade + "!" if grade == "Perfect" else grade,
 				"col": COL[kind], "t0": spell["impact"]})
 	_spells.append(spell)
+	if not auto:
+		_last_cast = {"kind": kind, "t": now, "ball": best if grade != "" else -1, "grade": grade, "spell": spell}
+
+
+## A press with no ball in reach while one is just about to arrive (within EARLY):
+## that's spamming, so the ball gets through. Balls that wait for you in practice are spared.
+func _wreck_early(now: float) -> void:
+	for b in _balls:
+		if b["state"] != "fly" or b.get("hold", false):
+			continue
+		var ahead: float = b["hit_t"] - (now - Conductor.input_offset)
+		if ahead > GOOD and ahead <= EARLY:
+			b["state"] = "wrong"
+			_cut_burst(b)
+			_miss()
+			return
+
+
+## Both spells at once: take back the hit the first press made.
+func _undo_both(last: Dictionary) -> void:
+	last["spell"]["impact"] = -1.0
+	if last["ball"] < 0 or last["ball"] >= _balls.size():
+		return
+	var b: Dictionary = _balls[last["ball"]]
+	if b["state"] != "target":
+		return
+	b["state"] = "wrong"
+	_cut_burst(b)
+	_tally[last["grade"]] -= 1
+	_miss()
+	_pops = _pops.filter(func(p): return p["t0"] != b["impact"])
+
+
+## Practice, 3rd try: the ball hangs at the burst point until you press. The right
+## element blasts it (and time runs again); the wrong one just fizzles.
+func _freeze_ball() -> void:
+	_frozen = true
+	_freeze_v = Conductor.visual_position
+
+
+func _unfreeze() -> void:
+	_frozen = false
+
+
+## While frozen the metronome keeps going; the ball's clock is pushed along with
+## it every frame, so it stays right at the burst point.
+func _hold_frozen_ball() -> void:
+	var v := Conductor.visual_position
+	var dt := v - _freeze_v
+	_freeze_v = v
+	var b: Dictionary = _balls[0]
+	b["launch_t"] += dt
+	b["hit_t"] += dt
+	b["arrive_v"] += dt
+	_demo_end = b["hit_t"] + 1.4
+
+
+## Wrong element: it just fizzles and the ball keeps waiting. The right one is a
+## normal (on-time) cast at the waiting ball.
+func _cast_frozen(kind: String) -> bool:
+	if _balls[0]["kind"] == kind:
+		_cast_v = Conductor.visual_position
+		_play("cast_" + kind, -4.0)
+		return false
+	_unfreeze()
+	_balls[0]["hold"] = false
+	return true
 
 
 ## A ball that got through: silence its on-beat burst if it's still ringing.
@@ -525,12 +789,22 @@ func _miss() -> void:
 # --- clock -----------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
-	if (_phase == Phase.DEMO or _phase == Phase.RECORD) and Conductor.playing:
-		# the demo (and record mode) casts the opposite element by itself, exactly when a perfect press registers
+	if _frozen:
+		_hold_frozen_ball()
+	elif _phase == Phase.DEMO and not _balls.is_empty() and _balls[0].get("hold", false) and _balls[0]["state"] == "fly" and Conductor.visual_position >= _balls[0]["arrive_v"]:
+		_freeze_ball()
+	if _phase == Phase.RECORD and Conductor.playing:
+		# record mode casts the opposite element by itself, exactly when a perfect press registers
 		for b in _balls:
 			if b["state"] == "fly" and Conductor.live_position() >= b["hit_t"] + Conductor.input_offset:
 				_cast("ice" if b["kind"] == "fire" else "fire", true)
-		if _phase == Phase.DEMO and Conductor.song_position >= _demo_end:
+	if _phase == Phase.DEMO and Conductor.playing and Conductor.song_position >= _demo_end:
+		var got: bool = not _balls.is_empty() and _balls[0]["state"] == "target"
+		if not got:
+			_start_demo(_demo_step, true)    # missed: same shot again
+		elif _demo_step == 0:
+			_start_demo(1)                   # now the other element
+		else:
 			_end_demo()
 	if (_phase == Phase.PLAY or _phase == Phase.DEMO or _phase == Phase.RECORD) and Conductor.playing:
 		var pos := Conductor.song_position
@@ -544,9 +818,9 @@ func _process(_delta: float) -> void:
 			# The burst is scheduled to sound exactly on the beat, like the launch.
 			# Waiting for the press would make it late by the player's whole input
 			# latency (a press only registers ~input_offset after the beat it hits).
-			if b["burst_sfx"] == null and b["state"] in ["fly", "target"] and pos >= b["hit_t"] - lat:
+			if b["burst_sfx"] == null and b["state"] in ["fly", "target"] and pos >= b["hit_t"] - lat 					and not (b.get("hold", false) and b["state"] == "fly"):
 				b["burst_sfx"] = _play("burst_" + ("ice" if b["kind"] == "fire" else "fire"), -2.0)
-			if b["state"] == "fly" and pos - Conductor.input_offset > b["hit_t"] + GOOD + MISS_TAIL:
+			if b["state"] == "fly" and pos - Conductor.input_offset > b["hit_t"] + GOOD + MISS_TAIL and not b.get("hold", false):
 				b["state"] = "miss"
 				_cut_burst(b)
 				_miss()
@@ -598,9 +872,14 @@ func _draw() -> void:
 		_draw_hud()
 	if _phase == Phase.DEMO:
 		# on the dark ground, clear of the ball's flight and the burst in the sky
-		_text("WATCH!", Vector2(660, 478), 40, Color.WHITE, true, 1.0)
-		_text("Fire? Freeze it with ICE!", Vector2(660, 512), 22, COL["ice"], true, 1.0)
-		_text("SPACE to skip", Vector2(576, VP.y - 22), 18, Color(1, 1, 1, 0.6), true)
+		var head := "Try again!" if _demo_retry else ("Practice  1/2" if _demo_step == 0 else "Practice  2/2")
+		_text(head, Vector2(660, 474), 36, Color.WHITE, true, 1.0)
+		if _demo_step == 0:
+			_text("Fireball? Tap the LEFT side!", Vector2(660, 510), 24, COL["ice"], true, 1.0)
+		else:
+			_text("Iceball? Tap the RIGHT side!", Vector2(660, 510), 24, COL["fire"], true, 1.0)
+		_draw_key_prompt(v)
+		_text("SPACE to skip", Vector2(576, VP.y - 44), 16, Color(1, 1, 1, 0.5), true)
 	elif _phase == Phase.CARD:
 		_draw_card()
 		if Time.get_ticks_msec() / 1000.0 - _rec_msg_t < 6.0:
@@ -740,7 +1019,11 @@ func _draw_wand(v: float) -> void:
 	var frames: Array = _tex["wand"]
 	if frames.is_empty():
 		return
-	var kick := Vector2(-12, 12) * maxf(0.0, 1.0 - (v - _cast_v) / 0.16)
+	# recoil after a cast; a cast from before the clock restarted (practice -> game) doesn't count
+	var since := v - _cast_v
+	var kick := Vector2(-12, 12) * (clampf(1.0 - since / 0.16, 0.0, 1.0) if since >= 0.0 else 0.0)
+	if _phase == Phase.PLAY:
+		kick += _walk_in(v)
 	# the gnome stands behind the wand and its hands go over it, as layered in Krita;
 	# it rocks back a little less than the wand when you cast
 	var gnome: Array = _tex["gnome"]
@@ -754,6 +1037,18 @@ func _draw_wand(v: float) -> void:
 	_draw_layer(frames[0], "wand", kick)
 	if not _tex["gnome_hands"].is_empty():
 		_draw_layer(_tex["gnome_hands"][0], "gnome_hands", kick)
+
+
+## When the game starts the gnome walks up from the bottom left to his spot,
+## wand in hand: eases in over WALK_IN seconds, bobbing with each step.
+func _walk_in(v: float) -> Vector2:
+	var k := clampf(v / WALK_IN, 0.0, 1.0)
+	if k >= 1.0:
+		return Vector2.ZERO
+	var left := 1.0 - k
+	var ease := left * left                         # ease-out: on screen at once, slowing as he arrives
+	var bob := -absf(sin(v * PI * 2.0)) * 14.0 * minf(left * 4.0, 1.0)
+	return WALK_FROM * ease + Vector2(0, bob)
 
 
 func _draw_layer(tex: Texture2D, layer: String, shift: Vector2) -> void:
@@ -777,10 +1072,8 @@ func _draw_wall() -> void:
 
 
 func _draw_hud() -> void:
-	_text("A / Left", Vector2(VP.x - 300, VP.y - 22), 18, Color(1, 1, 1, 0.8))
-	_text("ICE", Vector2(VP.x - 222, VP.y - 22), 18, COL["ice"])
-	_text("D / Right", Vector2(VP.x - 160, VP.y - 22), 18, Color(1, 1, 1, 0.8))
-	_text("FIRE", Vector2(VP.x - 74, VP.y - 22), 18, COL["fire"])
+	_text("tap left: ICE", Vector2(330, VP.y - 22), 18, COL["ice"])
+	_text("tap right: FIRE", Vector2(VP.x - 160, VP.y - 22), 18, COL["fire"])
 
 
 ## Record mode: one row per pattern (its call bar), with the taps on a 4-beat strip.
@@ -823,16 +1116,48 @@ func _draw_record() -> void:
 	_text("A = throw ICE    D = throw FIRE    Z undo    R start over    Enter save", Vector2(576, VP.y - 22), 18, Color(1, 1, 1, 0.85), true)
 
 
+## Practice: the key to press, with a square closing in on it that wraps the key
+## exactly when the ball arrives (press then). While the ball waits, the square pulses.
+func _draw_key_prompt(v: float) -> void:
+	if _balls.is_empty():
+		return
+	var b: Dictionary = _balls[0]
+	var col: Color = COL["ice"] if _demo_step == 0 else COL["fire"]
+	# ICE is the left half of the screen, FIRE the right half: the TAP sits in the
+	# middle of the half you tap, and that half glows.
+	var c := Vector2(VP.x * (0.25 if _demo_step == 0 else 0.75), 230)
+	var live: bool = b["state"] == "fly"
+	if live:
+		var half := Rect2(0.0 if _demo_step == 0 else VP.x * 0.5, 0.0, VP.x * 0.5, VP.y)
+		draw_rect(half, Color(col, 0.08))
+	var cap := Rect2(c - Vector2(48, 28), Vector2(96, 56))
+	draw_rect(cap.grow(4), col if live else Color(col, 0.4))
+	draw_rect(cap, Color(1, 0.97, 0.88, 1.0 if live else 0.5))
+	_text("TAP", c + Vector2(0, 11), 30, Color(INK, 1.0 if live else 0.5), true)
+	if not live:
+		return
+	const HUG := 60.0                  # half-size of the square when it wraps the TAP
+	if _frozen:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 2.0)
+		_square(c, HUG + 6.0 * pulse, col, 6.0)
+		return
+	var lead := 2.0 * Conductor.seconds_per_beat   # the square shows up 2 beats ahead
+	var left: float = b["arrive_v"] - v
+	if left > lead or left < -GOOD:
+		return
+	var k := clampf(left / lead, 0.0, 1.0)
+	_square(c, lerpf(HUG, 170.0, k), Color(col, 1.0 - 0.6 * k), lerpf(7.0, 3.0, k))
+
+
+## Outline of a square centred on c, `half` from the centre to each side.
+func _square(c: Vector2, half: float, col: Color, width: float) -> void:
+	draw_rect(Rect2(c - Vector2(half, half), Vector2(half, half) * 2.0), col, false, width)
+
+
 func _draw_card() -> void:
-	_panel(Rect2(226, 120, 700, 360))
-	_text("WIZARD TOWER", Vector2(576, 180), 40, INK, true)
-	_text("The enemy tower fires a pattern into the sky.", Vector2(576, 236), 22, INK, true)
-	_text("One bar later it rains back down on you, same rhythm.", Vector2(576, 268), 22, INK, true)
-	_text("Blast each ball as it reaches the burst point,", Vector2(576, 316), 22, INK, true)
-	_text("with the OPPOSITE element:", Vector2(576, 348), 22, INK, true)
-	_text("A / Left  =  ICE  (freezes fire)", Vector2(576, 392), 22, COL["ice"].darkened(0.35), true)
-	_text("D / Right  =  FIRE  (melts ice)", Vector2(576, 424), 22, COL["fire"].darkened(0.25), true)
-	_text("SPACE to start      F2 record your own patterns", Vector2(576, 464), 18, INK.lightened(0.4), true)
+	_panel(Rect2(376, 190, 400, 150))
+	_text("WIZARD TOWER", Vector2(576, 250), 40, INK, true)
+	_text("Tap to start", Vector2(576, 300), 22, INK.lightened(0.3), true)
 
 
 func _draw_results() -> void:
@@ -840,7 +1165,7 @@ func _draw_results() -> void:
 	_text("TOWER DEFENDED!" if _tally["Miss"] <= 6 else "THE TOWER IS SCORCHED", Vector2(576, 210), 32, INK, true)
 	var got: int = _tally["Perfect"] + _tally["Good"]
 	_results.draw_percent(self, _font, Vector2(576, 320), got, got + _tally["Miss"])
-	_text("SPACE / R to play again   -   Esc for menu", Vector2(576, 440), 18, INK.lightened(0.4), true)
+	_text("Tap to play again", Vector2(576, 440), 18, INK.lightened(0.4), true)
 
 
 # --- helpers ---------------------------------------------------------------------

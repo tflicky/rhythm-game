@@ -7,7 +7,7 @@ extends Node2D
 ## Press F2 at runtime to switch modes (restarts the song).
 
 enum Mode { PLAY, RECORD }
-enum Phase { DEMO, PRACTICE, TRANSITION, SONG }
+enum Phase { DEMO, PRACTICE, TRANSITION, SONG, SHOT, CARD }
 
 ## Drag a Beatmap .tres here (defaults to rhythm_monkey.tres).
 @export var beatmap: Beatmap
@@ -17,6 +17,11 @@ enum Phase { DEMO, PRACTICE, TRANSITION, SONG }
 @export_group("Practice round")
 ## Start each play session with a practice round. Turn off to jump straight into the song.
 @export var practice: bool = true
+## Wizard-style practice: two short tries over one steady metronome (a coconut,
+## then a banana pair) with a TAP box and a closing square showing when to catch.
+## A miss repeats the try; after two misses the fruit waits in his hands for your
+## tap. Then a title card. Off = the older demo + checkpoint practice below.
+@export var practice_shots: bool = true
 ## Before practice, show how it's played: one coconut falls and the monkey catches it by himself.
 @export var demo: bool = true
 ## Seconds after the demo catch before practice starts.
@@ -46,6 +51,13 @@ var _practice_passed := false   ## once passed, R replays the song without pract
 var _song_stream: AudioStream
 var _metronome: AudioStreamWAV
 var _practice_kind := "catch"   ## the checkpoint being practised: "catch" (coconuts), then "banana"
+const SHOT_CLICK_BEATS := 256   ## practice-shots metronome length (one track, never restarted)
+var _shot_step := 0
+var _shot_fails := 0
+var _shot_n := 0                ## fruit in this try
+var _shot_graded := 0
+var _shot_failed := false
+var _shot_next_at := -1.0       ## song time to move on (or retry), once every fruit is graded
 
 
 var _pause: PauseMenu
@@ -96,7 +108,9 @@ func _set_active(n: Node2D, on: bool) -> void:
 
 
 func _restart() -> void:
-	if mode == Mode.PLAY and practice and not _practice_passed:
+	if mode == Mode.PLAY and practice and not _practice_passed and practice_shots:
+		_start_shots()
+	elif mode == Mode.PLAY and practice and not _practice_passed:
 		if demo:
 			_start_demo()
 		else:
@@ -120,6 +134,70 @@ func _start_demo() -> void:
 	audio.volume_db = practice_metronome_db
 	Conductor.play()
 	game.begin([{"beat": practice_first_beat, "cue": "catch", "length": 0.0, "time": Conductor.time_of_beat(practice_first_beat)}])
+
+
+# --- practice shots ------------------------------------------------------------
+
+func _start_shots(step := 0) -> void:
+	Conductor.stop()
+	_phase = Phase.SHOT
+	game.practice = true
+	game.demo = false
+	game.shots = true
+	game.title_card = false
+	game.banner = ""
+	audio.stream = ClickTrack.make(Conductor.bpm, SHOT_CLICK_BEATS, Conductor.beats_per_measure, Conductor.first_beat_offset)
+	audio.volume_db = practice_metronome_db
+	Conductor.play()
+	_queue_shot(step, false)
+
+
+## One try: the cue sound(s) start on the next downbeat; the metronome keeps going.
+func _queue_shot(step: int, retry: bool) -> void:
+	_shot_step = step
+	_shot_fails = _shot_fails + 1 if retry else 0
+	game.shot_step = step
+	game.shot_retry = retry
+	game.hold = _shot_fails >= 2
+	game.frozen = false
+	var start := 4.0
+	if Conductor.song_position_in_beats > 0.5:
+		start = ceilf((Conductor.song_position_in_beats + 1.0) / 4.0) * 4.0
+	var cs: Array = []
+	if step == 0:     # coconut: cue on the downbeat, catch a beat later
+		cs.append({"beat": start + 1.0, "cue": "catch", "length": 0.0, "time": Conductor.time_of_beat(start + 1.0)})
+	else:             # bananas: tap-tap on beats 1 and 2, catch-catch on 3 and 4
+		for b in [start + 2.0, start + 3.0]:
+			cs.append({"beat": b, "cue": "banana", "length": 0.0, "time": Conductor.time_of_beat(b)})
+	_shot_n = cs.size()
+	_shot_graded = 0
+	_shot_failed = false
+	_shot_next_at = -1.0
+	game.begin(cs)
+
+
+func _process(_dt: float) -> void:
+	if _phase != Phase.SHOT or _shot_next_at < 0.0 or Conductor.song_position < _shot_next_at:
+		return
+	_shot_next_at = -1.0
+	if _shot_failed:
+		_queue_shot(_shot_step, true)
+	elif _shot_step == 0:
+		_queue_shot(1, false)
+	else:
+		_practice_passed = true
+		_show_title()
+
+
+## After the practice shots: "MONKEY BUSINESS / Tap to start".
+func _show_title() -> void:
+	Conductor.stop()
+	_phase = Phase.CARD
+	game.shots = false
+	game.practice = false
+	game.begin([])
+	game.title_card = true
+	game.queue_redraw()
 
 
 func _start_practice(kind := "catch") -> void:
@@ -157,6 +235,10 @@ func _start_song() -> void:
 	_phase = Phase.SONG
 	game.practice = false
 	game.demo = false
+	game.shots = false
+	game.title_card = false
+	game.hold = false
+	game.frozen = false
 	game.banner = ""
 	audio.stream = _song_stream
 	audio.volume_db = 0.0
@@ -171,6 +253,13 @@ func _start_song() -> void:
 
 
 func _on_graded(grade: String) -> void:
+	if _phase == Phase.SHOT:
+		_shot_graded += 1
+		if grade != "Perfect":       # a bobble or a bonk: this try doesn't count
+			_shot_failed = true
+		if _shot_graded >= _shot_n:
+			_shot_next_at = Conductor.song_position + 1.0
+		return
 	if _phase == Phase.DEMO:
 		_phase = Phase.TRANSITION
 		await get_tree().create_timer(demo_outro).timeout
@@ -199,12 +288,24 @@ func _on_graded(grade: String) -> void:
 
 
 func _on_song_finished() -> void:
+	if _phase == Phase.SHOT:
+		_start_shots(_shot_step)       # the metronome ran out (a very long wait): carry on
+		return
 	if _phase == Phase.PRACTICE:
 		Conductor.play()               # keep practising: the metronome starts over
 		game.begin(_practice_cues())
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	# a tap / click / SPACE on the title card starts the song; on the results, plays again
+	var tap: bool = e.is_action_pressed("ui_accept") \
+		or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	if tap and _phase == Phase.CARD:
+		_start_song()
+		return
+	if tap and game._finished:
+		_restart()
+		return
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
 	match e.keycode:
@@ -212,7 +313,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			_restart()
 		KEY_S:
 			# skip practice (S is the recorder's save key in RECORD mode -- phase is SONG there)
-			if _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION]:
+			if _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION, Phase.SHOT, Phase.CARD]:
 				_practice_passed = true
 				_start_song()
 		KEY_ESCAPE:

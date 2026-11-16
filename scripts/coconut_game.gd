@@ -173,6 +173,15 @@ var practice_goal := 3
 var practice_kind := "catch"       ## which checkpoint: "catch" (coconuts) or "banana"
 var banner := ""                   ## big centred message, e.g. between practice and the song
 var demo := false                  ## "watch" demo before practice: the monkey catches by himself, presses are ignored
+## Practice shots (driven by rhythm.gd, like the Wizard's and Grill's): a TAP box
+## with a square closing in on it, instead of the practice panel.
+var shots := false
+var shot_step := 0                 ## 0 = one coconut, 1 = a banana pair
+var shot_retry := false
+var hold := false                  ## this try's fruit waits in his hands until you tap
+var frozen := false                ## ...and is waiting right now
+var title_card := false            ## "MONKEY BUSINESS / Tap to start" (taps are rhythm.gd's)
+var _freeze_last := 0.0
 @onready var _panel_sb := _panel_style()
 
 var _sfx_players: Array[AudioStreamPlayer] = []
@@ -351,6 +360,12 @@ func _process(_dt: float) -> void:
 		_falling.append({"cue": c, "spawn_t": spawn_t, "sfx_done": false})
 		_next += 1
 
+	if frozen:
+		_hold_fruit(now)
+	elif hold and not _falling.is_empty() and now >= _falling[0]["cue"]["time"] + Conductor.input_offset:
+		frozen = true                  # the fruit waits in his hands for your tap
+		_freeze_last = now
+
 	for i in range(_falling.size() - 1, -1, -1):
 		var f: Dictionary = _falling[i]
 		# Demo: he catches it himself, the moment it reaches his hands.
@@ -362,13 +377,13 @@ func _process(_dt: float) -> void:
 			continue
 		# The thunk, pre-scheduled onto the cue's beat. Fire it output-latency early
 		# so it leaves the speakers exactly when the music reaches the beat.
-		if sfx_catch_on_beat and not f["sfx_done"] and now >= f["cue"]["time"] - latency:
+		if sfx_catch_on_beat and not hold and not f["sfx_done"] and now >= f["cue"]["time"] - latency:
 			f["sfx_done"] = true
 			_play_catch(f["cue"]["cue"])
 		# Miss only once the whole Good window (measured against the player's own
 		# input latency) has passed -- so the fruit is still catchable while it
 		# looks like it's in his hands.
-		if now > f["cue"]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
+		if not hold and now > f["cue"]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
 			_bonk(f)
 			_resolve(f, "Miss")
 
@@ -383,10 +398,14 @@ func _process(_dt: float) -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	# a tap on a phone arrives as a left click (touch is emulated as mouse), so
+	# ScreenTouch isn't read too -- that would count every tap twice
 	var pressed: bool = e.is_action_pressed("ui_accept") \
-		or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT) \
-		or (e is InputEventScreenTouch and e.pressed)
-	if not pressed or demo:
+		or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
+	if not pressed or demo or title_card or _finished:
+		return
+	if frozen:
+		_catch_frozen()
 		return
 	if _falling.is_empty():
 		_log_press("no fruit falling", 0.0)
@@ -415,6 +434,34 @@ func _unhandled_input(e: InputEvent) -> void:
 		_set_monkey("bobble", fruit)
 		_deflect(fruit)
 		_resolve(f, "Good")
+
+
+## While a fruit waits in his hands, every fruit still to come is pushed along
+## with the clock, so it stays put and the rest keep their rhythm behind it.
+func _hold_fruit(now: float) -> void:
+	var dt := now - _freeze_last
+	_freeze_last = now
+	if dt <= 0.0:
+		return
+	var moved := {}
+	for f in _falling:
+		f["spawn_t"] += dt
+		moved[f["cue"]] = true
+	for i in range(_next, cues.size()):
+		moved[cues[i]] = true
+	for c: Dictionary in moved:
+		c["time"] += dt
+		c["beat"] += dt / Conductor.seconds_per_beat
+	if _pending_tap2_at >= 0.0:
+		_pending_tap2_at += dt
+
+
+func _catch_frozen() -> void:
+	frozen = false
+	var f: Dictionary = _falling[0]
+	_play_catch(f["cue"]["cue"])
+	_set_monkey("catch", f["cue"]["cue"])
+	_resolve(f, "Perfect")
 
 
 ## Prints every press with its timing error, and shows the last one in the HUD,
@@ -549,8 +596,12 @@ func _draw() -> void:
 
 	_draw_fx(now)
 	_draw_count_in(now)
-	if demo:
+	if title_card:
+		_draw_title_card()
+	elif demo:
 		_draw_demo()
+	elif shots:
+		_draw_shots(now)
 	elif practice:
 		_draw_practice()
 	else:
@@ -867,7 +918,7 @@ func _draw_results() -> void:
 	draw_rect(box, Color(0, 0, 0, 0.6))
 	var got: int = _tally["Perfect"] + _tally["Good"]
 	_results.draw_percent(self, font, box.get_center() + Vector2(0, -10), got, got + _tally["Miss"])
-	draw_string(font, Vector2(box.position.x, box.end.y - 18), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
+	draw_string(font, Vector2(box.position.x, box.end.y - 18), "Tap to play again", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
 
 
 # --- practice round ----------------------------------------------------------
@@ -938,6 +989,58 @@ func _draw_demo() -> void:
 	draw_string(font, Vector2(box.position.x, box.position.y + 52), "WATCH!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 38, ink)
 	draw_string(font, Vector2(box.position.x, box.position.y + 92), "Cue sound... then catch!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 22, ink)
 	draw_string(font, Vector2(box.position.x, box.position.y + 132), "Press S to skip practice", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(ink, 0.6))
+
+
+## Practice shots: caption panel, plus a TAP box beside the monkey with a square
+## closing in on it that wraps it exactly when the next fruit should be caught.
+## While a fruit waits in his hands, the square pulses.
+func _draw_shots(now: float) -> void:
+	var font := ThemeDB.fallback_font
+	var ink := Color(0.2, 0.14, 0.12)
+	var box := Rect2(VP.x - 400, 24, 376, 112)
+	draw_style_box(_panel_sb, box)
+	var head := "Try again!" if shot_retry else "Practice  %d/2" % (shot_step + 1)
+	var sub := "Cue sound?  Catch it!" if shot_step == 0 else "Tap-tap?  Catch both!"
+	draw_string(font, Vector2(box.position.x, box.position.y + 46), head, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 32, ink)
+	draw_string(font, Vector2(box.position.x, box.position.y + 86), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 22, Color(0.6, 0.32, 0.08))
+	draw_string(font, Vector2(VP.x - 130, VP.y - 10), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 120, 14, Color(ink, 0.45))
+	# the next catch still to make
+	var next_t := INF
+	for f in _falling:
+		next_t = minf(next_t, f["cue"]["time"])
+	if _next < cues.size():
+		next_t = minf(next_t, cues[_next]["time"])
+	var c := monkey_pos + Vector2(230, -330)
+	var hot := Color(0.95, 0.55, 0.15)
+	var live := next_t < INF
+	var cap := Rect2(c - Vector2(48, 28), Vector2(96, 56))
+	draw_rect(cap.grow(4), hot if live else Color(hot, 0.4))
+	draw_rect(cap, Color(1, 0.97, 0.88, 1.0 if live else 0.5))
+	draw_string(font, Vector2(cap.position.x, cap.position.y + 39), "TAP", HORIZONTAL_ALIGNMENT_CENTER, cap.size.x, 30, Color(ink, 1.0 if live else 0.5))
+	if not live:
+		return
+	var hug := 60.0
+	if frozen:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 2.0)
+		var h := hug + 6.0 * pulse
+		draw_rect(Rect2(c - Vector2(h, h), Vector2(h, h) * 2.0), hot, false, 6.0)
+		return
+	var lead := 2.0 * Conductor.seconds_per_beat
+	var left: float = next_t + Conductor.input_offset - now
+	if left > lead or left < -GOOD:
+		return
+	var k := clampf(left / lead, 0.0, 1.0)
+	var hh := lerpf(hug, 190.0, k)
+	draw_rect(Rect2(c - Vector2(hh, hh), Vector2(hh, hh) * 2.0), Color(hot, 1.0 - 0.6 * k), false, lerpf(7.0, 3.0, k))
+
+
+func _draw_title_card() -> void:
+	var font := ThemeDB.fallback_font
+	var ink := Color(0.2, 0.14, 0.12)
+	var box := Rect2(VP.x * 0.5 - 220, VP.y * 0.5 - 140, 440, 150)
+	draw_style_box(_panel_sb, box)
+	draw_string(font, Vector2(box.position.x, box.position.y + 64), "MONKEY BUSINESS", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 40, ink)
+	draw_string(font, Vector2(box.position.x, box.position.y + 114), "Tap to start", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 22, Color(ink, 0.7))
 
 
 func _draw_banner() -> void:

@@ -486,3 +486,53 @@ in the file right now were recorded on the wrong grid and need recording again.
 call"*. Now each tap throws a real ball, and one bar later the wand answers it by itself
 on the beat, so recording plays the whole call → response → breather. Undo takes the
 ball back out of the sky too.
+
+## Wizard calls from my MIDI, tap-to-play tutorials everywhere, and the game on my iPhone (Nov 16)
+
+**Recording tweaks.** *"it feels like the response time to the call is slightly earlier
+than I would think, and when I try to add beats at the end of the bar it cuts off the
+recording"*. A tap up to ¾ of a beat past a call bar now sticks to the bar's last spot.
+The "early" answer was really the call being late: in record mode the throw sounds when
+my press arrives (~60 ms after the beat), while the answer is exactly on the grid.
+
+**Calls straight from my DAW.** I wrote the Wizard calls as a MIDI file (`Call.mid`, now
+`audio/music/wizard_call.mid`): low notes are fire, high notes are ice. *"the calls and
+answers shouldnt overlap"* and *"the response should basically be instead not and entire
+bar later"*, then I sent a MIDI of *"roughly where the response should be"*: every answer
+was my call moved 1 bar + about 1⅓ beats, so that's the rule now. Later *"i added call
+and response in the same midi"*: when a phrase is followed by its own copy, the game uses
+that copy as the answer. The super attack got trimmed to bar 19, and I wrote the last
+three sections (bars 22, 25, 29) myself after Claude's attempt *"do not make sense for
+the beat of the song"*.
+
+**A real tutorial, same in all three games.** No instruction text block any more. Each
+game opens with two practice tries over one steady metronome (*"keep the metronome going
+during the practice"*):
+- Wizard: freeze a fireball (left side), melt an iceball (right side).
+- Grill: flip one burger, then two in a rhythm.
+- Monkey: catch one coconut, then a banana pair.
+
+A TAP box gets a closing square that wraps it right when to press (*"instead of just
+saying now, have a enclosing circle"*, then *"make it an enclosing square instead"*).
+Miss and it says "Try again!"; *"if the player ... fails twice have it freeze and make
+them click it to understand"*: the ball / burger / fruit waits until you tap. Then a
+plain title card, "Tap to start".
+
+**Wizard extras.** *"dont let the player spam or click both the fire spell and ice spell
+at the same time"*: pressing too early on an incoming ball wrecks it, and both spells at
+once cancels the hit. *"when the actual game starts the gnome slowly walks up to his
+position from the bottom left with his wand"*.
+
+**What broke:** *"sometimes the gnome is just invisble until i use a spell"*. The wand
+recoil is timed from the last spell, and the song clock restarts at 0 when the game
+starts, so a spell from practice looked like it was in the future and the recoil flung
+him off screen. That was also the gnome *"walking out"* in practice 2/2. Fixed. Also the
+Monkey game read every phone tap twice (as a touch and as a click).
+
+**Mobile.** *"make it playable on mobile, and for the tutorials it should just say tap,
+for wizard game its it should be left side of screen vs right side"*. Everything works by
+tapping: Wizard is left half = ICE, right half = FIRE; title cards and results are tap
+to start / tap to play again; a "II" pause button in the corner (no Esc on a phone);
+calibration has a Skip button. *"i only have an iphone"*, and iPhone apps can only be
+built on a Mac, so there's now a Web export (single-threaded, for Safari) to put on
+itch.io as a private draft and play in the browser.

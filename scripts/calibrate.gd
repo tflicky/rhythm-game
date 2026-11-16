@@ -28,6 +28,18 @@ var _early_at := -10000         ## ticks (ms) of the last tap made during the co
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_font = ThemeDB.fallback_font
+	# Skip (same as Esc), as a button so phones can use it too
+	var skip := Button.new()
+	skip.text = "Skip"
+	skip.focus_mode = Control.FOCUS_NONE
+	skip.flat = true
+	skip.add_theme_font_size_override("font_size", 20)
+	skip.add_theme_color_override("font_color", Color(INK, 0.55))
+	skip.add_theme_color_override("font_hover_color", INK)
+	skip.position = Vector2(1152 * 0.5 - 40, 590)
+	skip.custom_minimum_size = Vector2(80, 40)
+	skip.pressed.connect(func(): get_tree().change_scene_to_file("res://MainMenu.tscn"))
+	add_child(skip)
 	var map: Resource = load("res://beatmaps/rhythm_monkey.tres")
 	Conductor.bpm = map.bpm if map else 128.0
 	Conductor.first_beat_offset = 0.0
@@ -155,10 +167,9 @@ func _draw() -> void:
 			_text("Not yet!", Vector2(0, 490), 24, Color(0.75, 0.25, 0.2), vp.x)
 	else:
 		draw_circle(Vector2(cx, 250), 18.0 + 8.0 * pulse, Color(0.85, 0.42, 0.2, 0.35 + 0.65 * pulse))
-		_text("Tap SPACE on every click!", Vector2(0, 320), 34, Color(0.25, 0.5, 0.2), vp.x)
+		_text("Tap on every click!", Vector2(0, 320), 34, Color(0.25, 0.5, 0.2), vp.x)
 		_draw_strip(cx, 400.0)
 		_text("Taps: %d / %d" % [_taps.size(), TAPS_NEEDED], Vector2(0, 480), 26, INK, vp.x)
-	_text("Esc  skip", Vector2(0, 610), 16, Color(INK, 0.5), vp.x)
 
 
 ## Centre line = on the beat; dots left are early, right are late.
@@ -205,7 +216,7 @@ func _build_panel() -> void:
 	row.add_child(_button("Retry", Color(0.42, 0.5, 0.62), _start))
 
 	var keys := Label.new()
-	keys.text = "Enter  continue   -   R  retry"
+	keys.text = ""
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	keys.add_theme_font_size_override("font_size", 16)
 	keys.add_theme_color_override("font_color", Color(INK, 0.5))

@@ -21,6 +21,7 @@ var _count_label: Label
 var _tick: AudioStreamPlayer
 var _ticks_at: Array = []              ## ms (ticks) of each count beat still to come
 var _resume_at := -1                   ## ms when the music comes back; -1 = not counting
+var _pause_button: Button              ## the "II" in the corner, for phones (no Esc key)
 
 
 ## Add a pause menu to `level`. `retry` restarts the level.
@@ -50,6 +51,7 @@ func is_busy() -> bool:
 func open() -> void:
 	if _root.visible:
 		return
+	_pause_button.visible = false
 	_resume_at = -1
 	_ticks_at.clear()
 	_count_label.visible = false
@@ -60,6 +62,7 @@ func open() -> void:
 
 func _continue() -> void:
 	_root.visible = false
+	_pause_button.visible = true
 	if not Conductor.playing or Conductor.seconds_per_beat <= 0.0:
 		get_tree().paused = false            # nothing playing (a card): just carry on
 		return
@@ -91,6 +94,7 @@ func _quit() -> void:
 
 func _close() -> void:
 	_root.visible = false
+	_pause_button.visible = true
 	_count_label.visible = false
 	_resume_at = -1
 	_ticks_at.clear()
@@ -189,6 +193,26 @@ func _build() -> void:
 		b.pressed.connect(item[2])
 		col.add_child(b)
 		_buttons.append(b)
+
+	# a pause button in the top-left corner: phones have no Esc key
+	_pause_button = Button.new()
+	_pause_button.text = "II"
+	_pause_button.focus_mode = Control.FOCUS_NONE   # SPACE must never press it
+	_pause_button.position = Vector2(14, 14)
+	_pause_button.custom_minimum_size = Vector2(56, 56)
+	_pause_button.add_theme_font_size_override("font_size", 24)
+	for state in ["normal", "hover", "pressed"]:
+		var ps := StyleBoxFlat.new()
+		ps.bg_color = Color(CREAM, 0.75 if state == "normal" else 0.95)
+		ps.set_corner_radius_all(12)
+		ps.set_border_width_all(3)
+		ps.border_color = Color(INK, 0.7)
+		_pause_button.add_theme_stylebox_override(state, ps)
+	_pause_button.add_theme_color_override("font_color", INK)
+	_pause_button.add_theme_color_override("font_hover_color", INK)
+	_pause_button.add_theme_color_override("font_pressed_color", INK)
+	_pause_button.pressed.connect(open)
+	add_child(_pause_button)
 
 	_count_label = Label.new()
 	_count_label.add_theme_font_size_override("font_size", 120)

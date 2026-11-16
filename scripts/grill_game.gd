@@ -17,7 +17,7 @@ extends Node2D
 ## answer bar after it has the same number of notes.
 ##   Space / click  flip     S  skip practice     R  restart     Esc  pause
 
-enum Phase { CARD, PRACTICE, SONG }
+enum Phase { CARD, PRACTICE, SONG, SHOT }
 
 const PERFECT := 0.075
 const GOOD := 0.15
@@ -62,6 +62,9 @@ const BURNT := Color(0.32, 0.28, 0.27)
 const STRIP_LEAD := 1.0
 ## Practice rhythms, taking turns.
 const PRACTICE_PATTERNS := [[0.0, 2.0], [0.0, 1.0, 2.0]]
+## Practice shots (like the Wizard's): 1/2 is one burger, 2/2 two in a rhythm.
+const SHOT_PATTERNS := [[0.0], [0.0, 2.0]]
+const SHOT_CLICK_BEATS := 256      ## practice metronome length (one track, never restarted)
 ## Scenery you drew, under res://art/grilling/: name -> [file, placeholder box].
 const ART_DIR := "res://art/grilling/"
 const ART := {
@@ -98,6 +101,11 @@ const ART := {
 
 @export_group("Practice round")
 @export var practice: bool = true
+## Wizard-style practice: two short shots over one steady metronome (1 burger, then
+## 2 in a rhythm), with the SPACE key and a closing square showing when to flip.
+## A miss repeats the shot; after two misses the burger waits for your press.
+## Then the title card. Off = the older Listen / Your turn strip practice.
+@export var practice_shots: bool = true
 ## While the "Flip it!" card is up, show how it's played behind it: a burger drops
 ## with a sizzle and gets flipped a bar later, on a loop until SPACE.
 @export var card_demo: bool = true
@@ -116,6 +124,13 @@ var _song_stream: AudioStream
 var _metronome: AudioStreamWAV
 var _card_ms := 0
 var _demo_next := 4.0             ## card demo: the beat the next demo burger sizzles on
+var _shot_step := 0                ## practice shots: 0 = one burger, 1 = two
+var _shot_fails := 0               ## misses on this shot; after 2 the burgers wait for you
+var _shot_retry := false
+var _shot_hold := false            ## this try waits for each press
+var _shot_frozen := false          ## ...and is waiting right now
+var _shot_cyc := {}                ## { you: [0 / 1 hit / 2 missed], failed }
+var _shot_end := 0.0               ## song time this try is judged
 
 var _patties: Array = []           ## { spot, t, beat, state, t0, sprite, mat, sounded, cyc, i }
 var _answers: Array = []           ## { beat, time, patty, cyc, i } -- still to grade, in time order
@@ -251,7 +266,9 @@ func _exit_tree() -> void:
 # --- flow --------------------------------------------------------------------------
 
 func _restart() -> void:
-	if practice and not _practice_passed:
+	if practice and not _practice_passed and practice_shots:
+		_start_shots()
+	elif practice and not _practice_passed:
 		_show_card()
 	else:
 		_start_song()
@@ -302,6 +319,75 @@ func _schedule_card_demo() -> void:
 	var ab := _demo_next + 4.0
 	_answers.append({"beat": ab, "time": Conductor.time_of_beat(ab), "patty": p, "cyc": null, "i": 0})
 	_demo_next += 8.0
+
+
+# --- practice shots ----------------------------------------------------------------
+
+func _start_shots() -> void:
+	Conductor.stop()
+	_reset_round()
+	_phase = Phase.SHOT
+	audio.stream = ClickTrack.make(Conductor.bpm, SHOT_CLICK_BEATS, Conductor.beats_per_measure, Conductor.first_beat_offset)
+	audio.volume_db = practice_metronome_db
+	Conductor.play()
+	_queue_shot(0, false)
+
+
+## One try: the burgers sizzle on the call bar, you flip them on the next bar.
+## The metronome keeps going; the try starts on the next downbeat.
+func _queue_shot(step: int, retry: bool) -> void:
+	_shot_step = step
+	_shot_retry = retry
+	_shot_fails = _shot_fails + 1 if retry else 0
+	_shot_hold = _shot_fails >= 2
+	_shot_frozen = false
+	_reset_round()
+	var start := 4.0
+	if Conductor.song_position_in_beats > 0.5:
+		start = ceilf((Conductor.song_position_in_beats + 1.0) / 4.0) * 4.0
+	var pat: Array = SHOT_PATTERNS[step]
+	_shot_cyc = {"start": start, "gap": 0.0, "pat": pat, "cues": [], "you": [], "strays": [],
+		"taps": [], "failed": false, "judged": true}   # same shape as a practice try
+	for i in pat.size():
+		_shot_cyc["cues"].append(0)
+		_shot_cyc["you"].append(0)
+		var pt := _new_patty(i, start + pat[i], _shot_cyc)
+		var ab: float = start + 4.0 + pat[i]
+		_answers.append({"beat": ab, "time": Conductor.time_of_beat(ab), "patty": pt, "cyc": _shot_cyc, "i": i})
+	_answer_total = _answers.size()
+	_shot_end = _answers[-1]["time"] + 2.2   # room for the last flip and the hop to the table
+
+
+func _update_shots(now: float) -> void:
+	if _shot_hold and not _shot_frozen and not _answers.is_empty() \
+			and Conductor.visual_position >= _answers[0]["time"] + Conductor.input_offset:
+		_shot_frozen = true            # the burger waits on the grill for your press
+	if _shot_frozen or now < _shot_end:
+		return
+	var ok: bool = not _shot_cyc["failed"] and not (_shot_cyc["you"] as Array).has(0)
+	if not ok:
+		_queue_shot(_shot_step, true)
+	elif _shot_step + 1 < SHOT_PATTERNS.size():
+		_queue_shot(_shot_step + 1, false)
+	else:
+		_practice_passed = true
+		_show_card()                   # title card, then SPACE for the song
+
+
+## The waiting burger gets flipped by this press; the rest of the try moves back
+## by however long it waited, so the rhythm stays the same.
+func _press_frozen() -> void:
+	var a: Dictionary = _answers.pop_front()
+	var late: float = Conductor.live_position() - Conductor.input_offset - a["time"]
+	for b in _answers:
+		b["time"] += late
+		b["beat"] += late / Conductor.seconds_per_beat
+	_shot_frozen = false
+	_hit(a, 0.0)
+	if not _answers.is_empty():
+		_shot_end = _answers[-1]["time"] + 2.2
+	else:
+		_shot_end = Conductor.song_position + 2.2
 
 
 func _start_practice() -> void:
@@ -356,6 +442,8 @@ func _new_patty(spot: int, beat: float, cyc: Variant) -> Dictionary:
 func _on_song_finished() -> void:
 	if _phase == Phase.SONG:
 		_finished = true
+	elif _phase == Phase.SHOT:
+		_start_shots()                 # the metronome ran out (a very long wait): start over
 	elif _phase == Phase.CARD and card_demo:
 		_start_card_demo()             # the metronome ran out: loop the demo
 
@@ -409,6 +497,8 @@ func _process(dt: float) -> void:
 			_schedule_practice()
 		var now: float = Conductor.song_position
 		var latency := AudioServer.get_output_latency()
+		if _phase == Phase.SHOT:
+			_update_shots(now)
 		if _phase == Phase.CARD:
 			_schedule_card_demo()
 			# the demo flips by itself, exactly when a perfect press would land
@@ -420,7 +510,8 @@ func _process(dt: float) -> void:
 				p["sounded"] = true
 				_play("flip_cue_2", -2.0)
 		# a patty nobody flipped -> Miss
-		while not _answers.is_empty() and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
+		while not _answers.is_empty() and not (_phase == Phase.SHOT and _shot_hold) \
+				and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
 			_miss(_answers.pop_front())
 		_drive_patties(Conductor.visual_position)
 		_fx = _fx.filter(func(f): return now - f["t0"] < 1.5)
@@ -569,7 +660,14 @@ func _unhandled_input(e: InputEvent) -> void:
 	if button:
 		if _phase == Phase.CARD:
 			if Time.get_ticks_msec() - _card_ms > 400:
-				_start_practice()
+				if _practice_passed or not practice:
+					_start_song()
+				else:
+					_start_practice()
+		elif _finished:
+			_restart()                 # results: tap to play again
+		elif _phase == Phase.SHOT and _shot_frozen:
+			_press_frozen()
 		else:
 			_press()
 		return
@@ -734,15 +832,23 @@ func _draw_ui() -> void:
 			_draw_card(l, font)
 		Phase.PRACTICE:
 			_draw_practice(l, font)
+		Phase.SHOT:
+			_draw_shots(l, font)
 	if _finished:
 		var box := Rect2(VP.x / 2 - 200, VP.y / 2 - 95, 400, 220)
 		l.draw_rect(box, Color(0.12, 0.08, 0.06, 0.82))
 		_results.draw_percent(l, font, box.get_center() + Vector2(0, -10), _tally["Perfect"] + _tally["Good"], _answer_total)
-		l.draw_string(font, Vector2(box.position.x, box.end.y - 18), "R to replay  -  Esc for menu", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
+		l.draw_string(font, Vector2(box.position.x, box.end.y - 18), "Tap to play again", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
 
 
 func _draw_card(l: Node2D, font: Font) -> void:
 	l.draw_rect(Rect2(Vector2.ZERO, VP), Color(0, 0, 0, 0.18))
+	if practice_shots:                 # after the practice shots: just the title
+		var tr := Rect2(VP.x * 0.5 - 200, VP.y * 0.5 - 75, 400, 150)
+		l.draw_style_box(_panel_sb, tr)
+		l.draw_string(font, Vector2(tr.position.x, tr.position.y + 62), "GRILL MASTER", HORIZONTAL_ALIGNMENT_CENTER, tr.size.x, 40, INK)
+		l.draw_string(font, Vector2(tr.position.x, tr.position.y + 112), "Tap to start", HORIZONTAL_ALIGNMENT_CENTER, tr.size.x, 22, Color(INK, 0.7))
+		return
 	var r := _caption(l, font, "Burgers sizzle?  Flip them back, same rhythm.", "Flip it!")
 	var blink := 0.55 + 0.45 * sin(Time.get_ticks_msec() / 250.0)
 	l.draw_string(font, Vector2(r.end.x - 130, r.end.y - 12), "SPACE", HORIZONTAL_ALIGNMENT_RIGHT, 116, 16, Color(INK, blink))
@@ -799,6 +905,38 @@ func _draw_practice(l: Node2D, font: Font) -> void:
 		else:
 			l.draw_arc(c, 8.0, 0.0, TAU, 24, Color(INK, 0.4), 2.5)
 	l.draw_string(font, Vector2(VP.x - 120, VP.y - 8), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 110, 14, Color(INK, 0.45))
+
+
+## Practice shots: a short caption, then a TAP box with a square closing in on
+## it that wraps the key exactly when the next burger should be flipped. While a
+## burger waits for you, the square pulses.
+func _draw_shots(l: Node2D, font: Font) -> void:
+	var head := "Try again!" if _shot_retry else "Practice  %d/%d" % [_shot_step + 1, SHOT_PATTERNS.size()]
+	var sub := "Sizzle?  Flip it!" if _shot_step == 0 else "Two sizzles?  Flip both, same rhythm!"
+	_caption(l, font, sub, head)
+	var c: Vector2 = (patty_spots[0] if not patty_spots.is_empty() else VP / 2.0) + Vector2(-40, -150)
+	var live := not _answers.is_empty()
+	var cap := Rect2(c - Vector2(62, 24), Vector2(124, 48))
+	var hot := Color(0.95, 0.55, 0.15)
+	l.draw_rect(cap.grow(4), hot if live else Color(hot, 0.4))
+	l.draw_rect(cap, Color(1, 0.97, 0.88, 1.0 if live else 0.5))
+	l.draw_string(font, Vector2(cap.position.x, cap.position.y + 33), "TAP", HORIZONTAL_ALIGNMENT_CENTER, cap.size.x, 26, Color(INK, 1.0 if live else 0.5))
+	l.draw_string(font, Vector2(VP.x - 120, VP.y - 8), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 110, 14, Color(INK, 0.45))
+	if not live:
+		return
+	var hug := Vector2(72, 34)         # the square's half-size when it wraps the TAP box
+	if _shot_frozen:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 2.0)
+		var hh := hug + Vector2(6, 6) * pulse
+		l.draw_rect(Rect2(c - hh, hh * 2.0), hot, false, 6.0)
+		return
+	var lead := 2.0 * Conductor.seconds_per_beat   # shows up 2 beats ahead
+	var left: float = _answers[0]["time"] + Conductor.input_offset - Conductor.visual_position
+	if left > lead or left < -GOOD:
+		return
+	var k := clampf(left / lead, 0.0, 1.0)
+	var h := hug + Vector2(130, 130) * k
+	l.draw_rect(Rect2(c - h, h * 2.0), Color(hot, 1.0 - 0.6 * k), false, lerpf(7.0, 3.0, k))
 
 
 ## One bar as a timeline: a faded lead-in ("4 &" of the bar before, STRIP_LEAD

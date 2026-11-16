@@ -108,7 +108,7 @@ func _ready() -> void:
 	_buttons.append(cal)
 
 	var hint := Label.new()
-	hint.text = "Up/Down to choose  -  Enter to play  -  Esc in a level returns here"
+	hint.text = "Tap a game to play  -  II (or Esc) in a level to pause"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.add_theme_color_override("font_color", INK.lightened(0.5))
