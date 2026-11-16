@@ -9,7 +9,7 @@ SR, BPM = 44100, 110.0
 SPB = 60.0 / BPM
 INTRO = 3          # bars before the first call
 STEP = 3           # bars per pattern: call, answer, breather
-SONG_BARS = 19     # how long the song is (your current one: 19 bars). Make it longer for more patterns.
+SONG_BARS = 29     # how long the song is (your current one: 29 bars). Make it longer for more patterns.
 HERE = os.path.dirname(os.path.abspath(__file__))
 SFX = sys.argv[1]
 

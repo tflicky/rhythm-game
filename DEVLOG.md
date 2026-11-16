@@ -460,3 +460,29 @@ caption moved down onto the ground between the wizard and the tower.
 
 Each demo has an Inspector switch to turn it off: **Demo** (Monkey), **Card Demo**
 (Grill), **Show Demo** (Wizard). The captions are placeholder wording.
+
+## Recording my own Wizard patterns, a new song, and the beat grid was wrong all along (Nov 15–16)
+
+*"let me set the beats for the wizard song"*. So the Wizard got a **record mode**:
+press **F2** on the title card and the song plays while I tap what the tower throws
+(A = ice ball, D = fire ball) in each call bar. A panel shows one row per call bar with
+my taps as dots. Z undoes, R starts over, and when the song ends (or Enter) the
+patterns are written straight into the `PATTERNS` list in `wizard_game.gd`. Any call
+bar I don't tap keeps its old pattern. Taps snap to eighths by default; Record Snap in
+the Inspector switches to triplets or sixteenths.
+
+**New song drop.** *"new wizard song dropppppp"*. The new cut is 65 s (30 bars), on
+the same 110 BPM grid, so it now fits **9 patterns**, with calls on DAW bars 4, 7, 10,
+13, 16, 19, 22, 25 and 28.
+
+**What broke:** *"what i think ive recorded doesnt match with whats there, and the sound
+effects seem to play preemptively"*. Lining up my MIDI parts (bass, melody, organ,
+kalimba) against the audio showed beat 1 is at **0.00 s**, not 0.243 s. The game's grid
+had been half a beat off, so my on-beat taps were saved as "&"s and the throws and
+bursts never sat on the music's beat. Fixed by setting the offset to 0.0. The patterns
+in the file right now were recorded on the wrong grid and need recording again.
+
+**Hearing the answer.** *"in my recordings i cant hear the response after recording the
+call"*. Now each tap throws a real ball, and one bar later the wand answers it by itself
+on the beat, so recording plays the whole call → response → breather. Undo takes the
+ball back out of the sky too.

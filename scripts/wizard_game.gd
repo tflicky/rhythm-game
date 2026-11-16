@@ -6,13 +6,14 @@ extends Node2D
 ##   A / Left / left click     ICE spell   (freezes fireballs)
 ##   D / Right / right click   FIRE spell  (melts iceballs)
 ##   Space start   R restart   Esc menu
+##   F2  record your own patterns (tap them in to the song, see _start_record)
 ##
 ## Art: art/wizard/*.png, exported from "wizard basics.kra" by tools/kra_export.ps1
 ## (at half size). Every frame keeps its place on the 3508x2480 Krita canvas
 ## (art/wizard/frames.json), so the wand, the spell and its burst line up exactly
 ## as drawn. The sky, hills, enemy tower and wall are placeholder drawings.
 
-enum Phase { DEMO, CARD, PLAY, DONE }
+enum Phase { DEMO, CARD, PLAY, DONE, RECORD }
 
 const VP := Vector2(1152, 648)
 const PERFECT := 0.075
@@ -29,14 +30,15 @@ const APEX_P := 0.45               ## how far along the path the hang point is
 const LANE_SPREAD := 95.0          ## sideways spread per beat of the bar (screen px)
 const MISS_FLY := 0.35             ## after a miss, seconds per "screen push" past the burst point
 ## The song: audio/music/Wizard_Song.wav. Measured from the audio: 110 BPM, the
-## beat grid starts 0.243 s into the file (same grid as the first cut of the song).
+## beat grid starts right at 0.0 s: the MIDI parts (bass, melody, organ, kalimba) all
+## line up with the audio there. (It was 0.243 before, which put every beat half a beat late.)
 ## The song is written in 3-bar phrases (from the MIDI parts: melody, organ and bass
 ## all repeat every 3 bars, starting at DAW bar 4). Each pattern follows one phrase:
 ##   bar 1 call (wizard throws over the melody), bar 2 answer (you), bar 3 breather
 ##   (the melody finishes its sentence, nothing to hit).
 ## The kalimba intro is DAW bars 1-3, so the first call is DAW bar 4 (bar 3 counting from 0).
 const SONG_BPM := 110.0
-const SONG_OFFSET := 0.243
+const SONG_OFFSET := 0.0
 const FIRST_CALL_BAR := 3          ## the free intro plays out before the first pattern
 const PATTERN_BARS := 3            ## bars per pattern: call, answer, breather
 ## Placeholder demo of the Rhythm Thief-style layout (tools/wizard_guide/make_demo.py):
@@ -51,6 +53,8 @@ const DEMO_PATTERN_BARS := 2       ## the demo goes straight call, answer, call,
 ## Before the title card, show how it's played: the tower lobs one fireball and
 ## your wand freezes it with ice, by itself. SPACE skips straight into the game.
 @export var show_demo := true
+## Record mode (F2): taps snap to this grid. Triplet = thirds of a beat.
+@export_enum("Off:0", "Quarter:1", "Eighth:2", "Triplet:3", "Sixteenth:4") var record_snap: int = 2
 
 var _first_call_bar := FIRST_CALL_BAR
 var _pattern_bars := PATTERN_BARS
@@ -59,24 +63,21 @@ var _pattern_bars := PATTERN_BARS
 ## If the song is too short for all of them, an even spread is used (always the
 ## first and the last), so it still builds up to the hardest ones.
 const PATTERNS := [
-	[[0, "fire"], [2, "fire"]],
-	[[0, "ice"], [2, "ice"]],
-	[[0, "fire"], [2, "ice"]],
-	[[0, "fire"], [1, "ice"], [2, "fire"], [3, "ice"]],
-	[[0, "ice"], [1, "ice"], [2, "fire"]],
-	[[0, "fire"], [1.5, "ice"], [3, "fire"]],
-	[[0, "ice"], [1, "fire"], [2, "ice"], [3, "fire"]],
-	[[0, "fire"], [1, "fire"], [2, "ice"], [3, "ice"]],
-	[[0, "ice"], [1.5, "fire"], [2, "ice"]],
-	[[0, "fire"], [1.5, "fire"], [3, "ice"]],
-	[[0, "ice"], [1, "fire"], [1.5, "ice"], [3, "fire"]],
-	[[0, "fire"], [1, "ice"], [2, "ice"], [2.5, "fire"]],
-	[[0, "ice"], [0.5, "fire"], [2, "ice"], [2.5, "fire"]],
-	[[0, "fire"], [1, "ice"], [2, "fire"], [3, "ice"], [3.5, "fire"]],
-	[[0, "ice"], [1.5, "ice"], [2, "fire"], [3, "fire"]],
-	[[0, "fire"], [0.5, "ice"], [1, "fire"], [2, "ice"], [3, "fire"]],
-	[[0, "ice"], [1, "fire"], [2, "ice"], [2.5, "fire"], [3, "ice"]],
+	[[2, "fire"], [3.5, "ice"]],
+	[[1.5, "ice"], [2, "ice"], [3.5, "fire"]],
+	[[1.5, "fire"], [2, "fire"], [3.5, "ice"]],
+	[[0, "fire"], [1.5, "ice"], [2, "ice"], [3.5, "fire"]],
+	[[1.5, "ice"], [3, "ice"], [3.5, "fire"]],
+	[[1.5, "fire"], [2, "fire"], [3.5, "ice"]],
+	[[1, "ice"], [2.5, "ice"], [3.5, "ice"]],
+	[[1, "fire"], [2.5, "fire"]],
+	[[1, "ice"], [1.5, "fire"], [2, "ice"], [2.5, "fire"], [3, "ice"], [3.5, "ice"]],
 ]
+var _patterns: Array = PATTERNS.duplicate(true)   ## what plays (record mode updates it live)
+var _rec: Array = []               ## record mode: one list of [beat, element] per call bar
+var _rec_undo: Array = []          ## pattern index of each tap, for Z
+var _rec_msg := ""
+var _rec_msg_t := -10.0
 
 ## --- art placement (Krita canvas -> screen) ---------------------------------
 const ART := "res://art/wizard/"
@@ -268,18 +269,153 @@ func _start() -> void:
 ## As many PATTERNS as the song has room for (each takes _pattern_bars bars; the
 ## last one only needs its call + answer bar before the song ends).
 func _patterns_that_fit() -> Array:
-	var bars := int((audio.stream.get_length() - Conductor.first_beat_offset) / (4.0 * Conductor.seconds_per_beat) + 0.05)
-	var room := clampi((bars - _first_call_bar - 2) / _pattern_bars + 1, 1, PATTERNS.size())
-	if room == PATTERNS.size():
-		return PATTERNS
+	var room := mini(_room(), _patterns.size())
+	if room == _patterns.size():
+		return _patterns
 	var picked := []
 	for i in room:
-		picked.append(PATTERNS[roundi(i * (PATTERNS.size() - 1) / maxf(room - 1, 1.0))])
+		picked.append(_patterns[roundi(i * (_patterns.size() - 1) / maxf(room - 1, 1.0))])
 	return picked
 
 
+## How many patterns the song has room for.
+func _room() -> int:
+	var bars := int((_song_stream.get_length() - Conductor.first_beat_offset) / (4.0 * Conductor.seconds_per_beat) + 0.05)
+	return maxi((bars - _first_call_bar - 2) / _pattern_bars + 1, 1)
+
+
+# --- record mode -------------------------------------------------------------------
+## F2: the song plays with nothing flying. In each CALL bar, tap what the tower
+## should throw: A = an ice ball, D = a fire ball. Taps snap to record_snap.
+## Z undoes the last tap. When the song ends (or Enter), the patterns are saved
+## into the PATTERNS list at the top of this script and SPACE plays them.
+## A call bar you don't tap keeps the pattern it had.
+func _start_record() -> void:
+	Conductor.stop()
+	audio.stream = _song_stream
+	audio.volume_db = 0.0
+	_balls.clear()
+	_spells.clear()
+	_pops.clear()
+	_hurt = {}
+	_rec = []
+	for i in _room():
+		_rec.append([])
+	_rec_undo = []
+	_rec_msg = ""
+	_phase = Phase.RECORD
+	Conductor.play()
+
+
+func _rec_tap(kind: String) -> void:
+	_play(kind, -2.0 if kind == "fire" else -8.0)    # the tower's throw sound
+	var beat := (Conductor.live_position() - Conductor.input_offset - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	if record_snap > 0:
+		beat = roundf(beat * record_snap) / record_snap
+	var rel := beat / 4.0 - _first_call_bar        # bars since the first call
+	var idx := floori(rel / _pattern_bars + 0.0001)
+	var in_bar := rel - idx * _pattern_bars
+	if idx < 0 or idx >= _rec.size() or in_bar >= 0.999:
+		_rec_note("Tap during a CALL bar")
+		return
+	var b := snappedf(maxf(in_bar, 0.0) * 4.0, 0.001)
+	var pat: Array = _rec[idx]
+	var launch_beat: float = (_first_call_bar + idx * _pattern_bars) * 4 + b
+	for i in range(pat.size() - 1, -1, -1):
+		if absf(pat[i][0] - b) < 0.01:             # same beat again: replace it
+			pat.remove_at(i)
+			_rec_undo = _rec_undo.filter(func(u): return not (u[0] == idx and absf(u[1] - b) < 0.01))
+			_drop_rec_ball(launch_beat)
+	pat.append([b, kind])
+	pat.sort_custom(func(x, y): return x[0] < y[0])
+	_rec_undo.append([idx, b])
+	# The ball really flies, and one bar later the wand answers it by itself,
+	# so you hear the whole call and response while you record.
+	var hit_t := Conductor.time_of_beat(launch_beat + TRAVEL_BEATS)
+	_balls.append({"kind": kind, "launch_t": Conductor.time_of_beat(launch_beat),
+		"hit_t": hit_t, "arrive_v": hit_t + Conductor.input_offset, "beat": launch_beat,
+		"lane": b, "state": "fly", "launched": true, "impact": -1.0, "burst_sfx": null, "hurt": false})
+
+
+func _drop_rec_ball(launch_beat: float) -> void:
+	_balls = _balls.filter(func(ball): return not (ball["state"] == "fly" and absf(ball.get("beat", -99.0) - launch_beat) < 0.01))
+
+
+func _rec_undo_last() -> void:
+	if _rec_undo.is_empty():
+		return
+	var last: Array = _rec_undo.pop_back()
+	var idx: int = last[0]
+	var pat: Array = _rec[idx]
+	for i in pat.size():
+		if absf(pat[i][0] - last[1]) < 0.01:
+			pat.remove_at(i)
+			break
+	_drop_rec_ball((_first_call_bar + idx * _pattern_bars) * 4 + last[1])
+	_rec_note("Undone")
+
+
+func _rec_note(t: String) -> void:
+	_rec_msg = t
+	_rec_msg_t = Time.get_ticks_msec() / 1000.0
+
+
+func _save_record() -> void:
+	Conductor.stop()
+	var base := _patterns_that_fit()
+	var out := []
+	for i in _rec.size():
+		if not _rec[i].is_empty():
+			out.append(_rec[i])
+		elif i < base.size():
+			out.append(base[i])
+	_patterns = out
+	_phase = Phase.CARD
+	if _write_patterns(out):
+		_rec_note("Saved into wizard_game.gd!  SPACE to play them")
+	else:
+		_rec_note("Couldn't write the file -- patterns printed in Output")
+	print("const PATTERNS := [\n" + _patterns_text(out) + "]")
+
+
+func _patterns_text(pats: Array) -> String:
+	var lines := ""
+	for p in pats:
+		var notes := []
+		for n in p:
+			var x: float = n[0]
+			var num := str(int(x)) if is_equal_approx(x, roundf(x)) else String.num(x, 3)
+			notes.append('[%s, "%s"]' % [num, n[1]])
+		lines += "\t[" + ", ".join(notes) + "],\n"
+	return lines
+
+
+## Rewrites the PATTERNS list in this script's source (only works when run from the editor).
+func _write_patterns(pats: Array) -> bool:
+	var path: String = get_script().resource_path
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return false
+	var src := f.get_as_text()
+	f.close()
+	var head := "const PATTERNS := [\n"
+	var a := src.find(head)
+	var b := src.find("\n]\n", a)
+	if a < 0 or b < 0:
+		return false
+	src = src.substr(0, a) + head + _patterns_text(pats) + src.substr(b + 1)
+	f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(src)
+	f.close()
+	return true
+
+
 func _on_song_finished() -> void:
-	if _phase == Phase.PLAY:
+	if _phase == Phase.RECORD:
+		_save_record()
+	elif _phase == Phase.PLAY:
 		_phase = Phase.DONE
 
 
@@ -292,15 +428,40 @@ func _unhandled_input(e: InputEvent) -> void:
 				else:
 					_pause.open()
 				get_viewport().set_input_as_handled()
+			KEY_F2:
+				if _phase == Phase.RECORD:
+					_save_record()
+				else:
+					_start_record()
 			KEY_R:
-				_start()
+				if _phase == Phase.RECORD:
+					_start_record()
+				else:
+					_start()
+			KEY_Z:
+				if _phase == Phase.RECORD:
+					_rec_undo_last()
 			KEY_SPACE, KEY_ENTER:
-				if _phase != Phase.PLAY:
+				if _phase == Phase.RECORD:
+					if e.keycode == KEY_ENTER:
+						_save_record()
+				elif _phase != Phase.PLAY:
 					_start()
 			KEY_A, KEY_LEFT:
-				_cast("ice")
+				if _phase == Phase.RECORD:
+					_rec_tap("ice")
+				else:
+					_cast("ice")
 			KEY_D, KEY_RIGHT:
-				_cast("fire")
+				if _phase == Phase.RECORD:
+					_rec_tap("fire")
+				else:
+					_cast("fire")
+	elif e is InputEventMouseButton and e.pressed and _phase == Phase.RECORD:
+		if e.button_index == MOUSE_BUTTON_LEFT:
+			_rec_tap("ice")
+		elif e.button_index == MOUSE_BUTTON_RIGHT:
+			_rec_tap("fire")
 	elif e is InputEventMouseButton and e.pressed:
 		if e.button_index == MOUSE_BUTTON_LEFT:
 			_cast("ice")
@@ -311,7 +472,7 @@ func _unhandled_input(e: InputEvent) -> void:
 ## A spell fires every press. If a ball is inside the hit window, the spell
 ## flies to the burst point and lands exactly when the ball gets there.
 func _cast(kind: String, auto := false) -> void:
-	if not (_phase == Phase.PLAY or (_phase == Phase.DEMO and auto)):
+	if not (_phase == Phase.PLAY or ((_phase == Phase.DEMO or _phase == Phase.RECORD) and auto)):
 		return
 	var now := Conductor.live_position()
 	var v := now + Conductor.video_offset
@@ -364,14 +525,14 @@ func _miss() -> void:
 # --- clock -----------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
-	if _phase == Phase.DEMO and Conductor.playing:
-		# the demo casts the opposite element by itself, exactly when a perfect press registers
+	if (_phase == Phase.DEMO or _phase == Phase.RECORD) and Conductor.playing:
+		# the demo (and record mode) casts the opposite element by itself, exactly when a perfect press registers
 		for b in _balls:
 			if b["state"] == "fly" and Conductor.live_position() >= b["hit_t"] + Conductor.input_offset:
 				_cast("ice" if b["kind"] == "fire" else "fire", true)
-		if Conductor.song_position >= _demo_end:
+		if _phase == Phase.DEMO and Conductor.song_position >= _demo_end:
 			_end_demo()
-	if (_phase == Phase.PLAY or _phase == Phase.DEMO) and Conductor.playing:
+	if (_phase == Phase.PLAY or _phase == Phase.DEMO or _phase == Phase.RECORD) and Conductor.playing:
 		var pos := Conductor.song_position
 		var v := Conductor.visual_position
 		var lat := AudioServer.get_output_latency()
@@ -409,10 +570,12 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	var v := Conductor.visual_position if _phase != Phase.CARD else 0.0
 	var beat_pulse := 0.0
-	if _phase == Phase.PLAY or _phase == Phase.DEMO:
+	if _phase == Phase.PLAY or _phase == Phase.DEMO or _phase == Phase.RECORD:
 		beat_pulse = exp(-fposmod(Conductor.song_position_in_beats, 1.0) * 5.0)
 	_draw_backdrop(beat_pulse)
 	_draw_enemy(v)
+	if _phase == Phase.RECORD:
+		_draw_record()             # under the balls, so you can watch them fly
 	_draw_wall()
 	_draw_wand(v)
 	for s in _spells:
@@ -431,7 +594,8 @@ func _draw() -> void:
 		var k := clampf((v - p["t0"]) / 0.7, 0.0, 1.0)
 		if v >= p["t0"]:
 			_text(p["text"], _impact_s + Vector2(-260, 90 - 30 * k), 32, Color(p["col"], 1.0 - k), true, 1.0 - k)
-	_draw_hud()
+	if _phase != Phase.RECORD:
+		_draw_hud()
 	if _phase == Phase.DEMO:
 		# on the dark ground, clear of the ball's flight and the burst in the sky
 		_text("WATCH!", Vector2(660, 478), 40, Color.WHITE, true, 1.0)
@@ -439,6 +603,8 @@ func _draw() -> void:
 		_text("SPACE to skip", Vector2(576, VP.y - 22), 18, Color(1, 1, 1, 0.6), true)
 	elif _phase == Phase.CARD:
 		_draw_card()
+		if Time.get_ticks_msec() / 1000.0 - _rec_msg_t < 6.0:
+			_text(_rec_msg, Vector2(576, 530), 22, Color.WHITE, true, 1.0)
 	elif _phase == Phase.DONE:
 		_draw_results()
 
@@ -617,6 +783,46 @@ func _draw_hud() -> void:
 	_text("FIRE", Vector2(VP.x - 74, VP.y - 22), 18, COL["fire"])
 
 
+## Record mode: one row per pattern (its call bar), with the taps on a 4-beat strip.
+func _draw_record() -> void:
+	var beats := Conductor.song_position_in_beats
+	var bar := floori(beats / 4.0)
+	var rel := bar - _first_call_bar
+	var cur := floori(float(rel) / _pattern_bars)
+	var in_call := rel >= 0 and rel % _pattern_bars == 0 and cur < _rec.size()
+	var x0 := 330.0
+	var w := 480.0
+	var y0 := 70.0
+	var row_h := 30.0
+	var r := Rect2(x0 - 130, y0 - 46, w + 250, 62 + row_h * _rec.size())
+	draw_rect(r.grow(4), Color(INK, 0.6))
+	draw_rect(r, Color(1, 0.97, 0.88, 0.72))
+	_text("RECORD", Vector2(x0 - 110, y0 - 16), 22, Color(0.8, 0.1, 0.1))
+	var status := "listen..."
+	if in_call:
+		status = "CALL - tap now!"
+	elif rel + 1 >= 0 and (rel + 1) % _pattern_bars == 0 and (rel + 1) / _pattern_bars < _rec.size():
+		status = "get ready..."
+	_text("DAW bar %d   %s" % [maxi(bar + 1, 1), status], Vector2(x0, y0 - 16), 22, INK)
+	for i in _rec.size():
+		var y := y0 + 8 + row_h * i
+		var live := in_call and i == cur
+		draw_rect(Rect2(x0, y, w, row_h - 8), Color(1, 0.85, 0.4) if live else Color(0.9, 0.86, 0.76))
+		for k in 5:
+			draw_line(Vector2(x0 + w * k / 4.0, y), Vector2(x0 + w * k / 4.0, y + row_h - 8), Color(INK, 0.5), 2.0 if k % 4 == 0 else 1.0)
+		_text("bar %d" % (_first_call_bar + i * _pattern_bars + 1), Vector2(x0 - 110, y + 17), 16, INK)
+		for n in _rec[i]:
+			draw_circle(Vector2(x0 + w * float(n[0]) / 4.0, y + (row_h - 8) / 2.0), 9.0, COL[n[1]])
+		if _rec[i].is_empty():
+			_text("(keeps old)", Vector2(x0 + w + 10, y + 17), 14, INK.lightened(0.4))
+		if live:
+			var px := x0 + w * fposmod(beats, 4.0) / 4.0
+			draw_line(Vector2(px, y - 3), Vector2(px, y + row_h - 5), Color(0.8, 0.1, 0.1), 2.0)
+	if Time.get_ticks_msec() / 1000.0 - _rec_msg_t < 1.5:
+		_text(_rec_msg, Vector2(576, 500), 24, Color.WHITE, true, 1.0)
+	_text("A = throw ICE    D = throw FIRE    Z undo    R start over    Enter save", Vector2(576, VP.y - 22), 18, Color(1, 1, 1, 0.85), true)
+
+
 func _draw_card() -> void:
 	_panel(Rect2(226, 120, 700, 360))
 	_text("WIZARD TOWER", Vector2(576, 180), 40, INK, true)
@@ -626,7 +832,7 @@ func _draw_card() -> void:
 	_text("with the OPPOSITE element:", Vector2(576, 348), 22, INK, true)
 	_text("A / Left  =  ICE  (freezes fire)", Vector2(576, 392), 22, COL["ice"].darkened(0.35), true)
 	_text("D / Right  =  FIRE  (melts ice)", Vector2(576, 424), 22, COL["fire"].darkened(0.25), true)
-	_text("SPACE to start", Vector2(576, 464), 18, INK.lightened(0.4), true)
+	_text("SPACE to start      F2 record your own patterns", Vector2(576, 464), 18, INK.lightened(0.4), true)
 
 
 func _draw_results() -> void:
