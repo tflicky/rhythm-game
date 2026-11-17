@@ -598,3 +598,20 @@ Then:
 
 **What broke:** deleting the dot colour joined two lines in the menu script and it
 wouldn't load for a moment; fixed.
+
+## Credits roll (Nov 17)
+
+**Credits.** *"I want a credits screen roll button on the main menu, its gonna have all of
+the animals starting with the main monkey, palm tree bump monkey, surfing monkey, all of
+the grilling animals, and the gnome"*. A Credits button now sits next to Calibrate Timing.
+It opens `Credits.tscn`: my drawings scroll up one at a time, each squashing and swaying
+on the beat a little after the one before. Hold Space / click (or touch) to speed it up,
+Esc to go back; it returns to the menu on its own when it's over. Cast, names and order
+are the `CAST` list at the top of `scripts/credits.gd`.
+
+Then the names: *"made by tommy flick, rename the bird to Dave, rename the palm bumper to
+Bonkey, Surfer to Surfkey"*, and *"get rid of all the Thes before their names"*. The
+cast is now Monkey, Bonkey, Surfkey, Squirrel, Dave, Raccoon, Bear, Gnome, then
+"Made by Tommy Flick" and "Thanks for playing!".
+
+**What broke:** nothing.

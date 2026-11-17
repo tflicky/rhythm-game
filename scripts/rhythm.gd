@@ -21,15 +21,15 @@ enum Phase { DEMO, PRACTICE, TRANSITION, SONG, SHOT, CARD }
 ## then a banana pair) with a TAP box and a closing square showing when to catch.
 ## A miss repeats the try; after two misses the fruit waits in his hands for your
 ## tap. Then a title card. Off = the older demo + checkpoint practice below.
-@export var practice_shots: bool = true
+@export var practice_shots: bool = false
 ## Before practice, show how it's played: one coconut falls and the monkey catches it by himself.
-@export var demo: bool = true
+@export var demo: bool = false
 ## Seconds after the demo catch before practice starts.
 @export var demo_outro: float = 1.2
-## Clean (Perfect) coconut catches needed for the first checkpoint.
+## Clean (Perfect) coconut catches IN A ROW needed for the first checkpoint (a bobble or miss resets it).
 @export var practice_goal: int = 3
-## Clean (Perfect) banana catches needed for the second (bananas come in pairs).
-@export var banana_goal: int = 4
+## Clean (Perfect) banana catches IN A ROW needed for the second (bananas come in pairs).
+@export var banana_goal: int = 3
 ## A practice coconut lands every this many beats...
 @export var practice_every: float = 4.0
 ## ...starting on this beat.
@@ -270,7 +270,11 @@ func _on_graded(grade: String) -> void:
 		if _phase == Phase.TRANSITION:   # not skipped with S / R in the meantime
 			_start_practice()
 		return
-	if _phase != Phase.PRACTICE or grade != "Perfect":
+	if _phase != Phase.PRACTICE:
+		return
+	if grade != "Perfect":           # in a row: a bobble or a bonk starts the count over
+		game.practice_caught = 0
+		game.queue_redraw()
 		return
 	game.practice_caught += 1
 	if game.practice_caught < game.practice_goal:

@@ -29,7 +29,7 @@ const INK := Color(0.2, 0.14, 0.12)
 ## Every sound is a file in SFX_DIR named after its slot (.wav / .ogg / .mp3).
 ## See audio/sfx/grill/README.md.
 const SFX_DIR := "res://audio/sfx/grill/"
-const SFX_SLOTS := ["flip_cue_2", "flip", "sizzle", "tong", "bun"]
+const SFX_SLOTS := ["flip_cue_2", "flip", "sizzle", "tong", "bun", "top_bun"]
 const COOK_SHADER := preload("res://shaders/patty_cook.gdshader")
 const VIVID_SHADER := preload("res://shaders/vivid.gdshader")
 ## Your flip drawing, as separate layers (art/grilling/parts/): back arm, patty,
@@ -51,23 +51,48 @@ const DROP_S := 0.12               ## a called patty falls this long, landing on
 const DROP_H := 70.0               ## ...from this far up (screen px)
 const SQUASH_S := 0.18             ## the little squash when it lands
 const THROW_H := 20.0              ## extra height (screen px) on the arc from the grill to the bun
+## Your burger drawing (scene/bun.png, burger.png, top_bun.png -- all on one shared
+## canvas so they line up): where its patty sits, in those PNGs' pixels. The patty
+## you flip lands there, so the drawing is sized to match the flipped patty.
+const BUN_PATTY := Rect2(0, 42, 179, 75)
+const TOP_BUN_AFTER := 0.5         ## beats after the patty lands that the top bun lands (on the "&")
+const TOP_BUN_DROP_S := 0.12       ## the top bun falls this long...
+const TOP_BUN_DROP_H := 140.0      ## ...from this far up (burger PNG px)
 ## The steals, used in this order (burger 1 gets the first, burger 6 the first again).
-##   squirrel         runs in along the table, grabs it, runs back out
-##   rabbit           hops in, grabs it, hops back out
-##   flying_squirrel  glides in and catches it in mid-air, before it reaches the bun
-##   raccoon          climbs up from under the table, grabs it, climbs back down
-##   mi_squirrel      drops from the sky on a rope, grabs it, gets pulled back up
-const STEALS := ["squirrel", "rabbit", "flying_squirrel", "raccoon", "mi_squirrel"]
+##   squirrel  runs in along the table, grabs it, runs back out
+##   bird      swoops in and catches it in mid-air, before it reaches the bun
+##   raccoon   pops up from behind the table, grabs it, sinks back down
+##   bear      walks in from the left behind the table, his arm swings up and
+##             grabs it, lifts it to his mouth, EATS it (chomp + chew), backs out
+const STEALS := ["squirrel", "bird", "raccoon", "bear"]
 ## Per steal, in beats: [coming in (ends at the grab), leaving with the burger].
-## The grab lands on a beat (except the flying squirrel's, which is mid-flip).
+## The grab lands on a beat (except the bird's, which is mid-flip).
 const STEAL_BEATS := {
 	"squirrel": [1.0, 1.5],
-	"rabbit": [1.0, 2.0],
-	"flying_squirrel": [1.0, 1.5],
+	"bird": [1.0, 1.5],
 	"raccoon": [1.0, 1.5],
-	"mi_squirrel": [1.0, 1.5],
+	"bear": [1.0, 2.0],
 }
-const FLY_CATCH := 1.8             ## beats after your press the flying squirrel catches the patty
+const BEAR_CHOMP_S := 0.12         ## the burger squashes into the bear's mouth this fast
+## The bear's leaving time (0..1): arm lifts the burger to his mouth until LIFT (chomp!),
+## chews until CHEW (arm going back down), then backs out.
+const BEAR_LIFT := 0.25
+const BEAR_CHEW := 0.6
+## His drawing, in bear.png px (bear_arm.png is the same size, your arm layer on its own).
+const BEAR_CHIN := Vector2(457, 234)       ## the point he's moved by
+const BEAR_SHOULDER := Vector2(205, 262)   ## the arm turns around this
+const BEAR_PAW := Vector2(270, 500)        ## where the burger sits in his paw
+const BEAR_PX := 0.87                      ## bear.png px -> screen px (before bear_scale)
+const BEAR_GRAB := -0.87                   ## arm turn (radians, - = up/forward) when the paw is on the burger
+const BEAR_MOUTH := -1.4                   ## ...and when it's up at his mouth
+const BEAR_ARM_FRONT := 0.45               ## arm turned past this: drawn over the table, not behind it
+const BEAR_FRONT_LEG := Rect2(250, 305, 215, 286)   ## his front leg in bear.png: drawn in front of the table
+## bear.png's body is cut off on its left; from this column (PNG px) leftward it's
+## stretched off the screen, so he can be small and still never show the cut.
+const BEAR_CUT := 96.0
+## Critters drawn BEHIND the picnic table (it hides their legs) instead of over it.
+const BEHIND_TABLE := ["bear", "raccoon"]
+const FLY_CATCH := 1.8             ## beats after your press the bird catches the patty
 const BURN_S := 0.25               ## a missed patty chars over this long...
 const BURN_FADE_AFTER := 0.7       ## ...then after this long fades away
 const BURN_FADE_S := 0.4
@@ -88,13 +113,16 @@ const ART := {
 	"salt": ["season/salt.png", Rect2(-18, -24, 36, 48)],
 	"pepper": ["season/pepper.png", Rect2(-18, -24, 36, 48)],
 	"picnic_table": ["scene/table.png", Rect2(9, 193, 408, 257)],   # drawn into `table_rect`
-	"bun": ["scene/bun.png", Rect2(-34, -12, 68, 30)],    # the bottom bun waiting on the table (its middle at a bun spot)
+	"bun": ["scene/bun.png", Rect2(-34, -12, 68, 30)],    # the empty bottom bun waiting on the table
+	"burger": ["scene/burger.png", Rect2(-34, -20, 68, 40)],   # bottom bun with the patty on it
+	"top_bun": ["scene/top_bun.png", Rect2(-34, -30, 68, 20)],
 	# critters: drawn facing RIGHT; the box's (0, 0) is where the burger goes (its mouth)
-	"squirrel": ["critters/squirrel.png", Rect2(-70, -40, 80, 70)],
-	"rabbit": ["critters/rabbit.png", Rect2(-75, -60, 85, 90)],
-	"flying_squirrel": ["critters/flying_squirrel.png", Rect2(-90, -30, 110, 60)],
-	"raccoon": ["critters/raccoon.png", Rect2(-50, -20, 100, 110)],
-	"mi_squirrel": ["critters/mi_squirrel.png", Rect2(-35, -75, 70, 95)],
+	# your Krita drawings, at their Krita size; the box's (0, 0) is on the mouth
+	"squirrel": ["critters/squirrel.png", Rect2(-213, -63, 237, 138)],
+	"bird": ["critters/bird.png", Rect2(-142, -65, 219, 100)],
+	"raccoon": ["critters/raccoon.png", Rect2(-119, -63, 189, 163)],
+	"bear": ["critters/bear.png", Rect2(-398, -204, 532, 514)],   # your Krita bear (body); placed by BEAR_CHIN
+	"bear_arm": ["critters/bear_arm.png", Rect2(-398, -204, 532, 514)],   # his arm layer, same canvas
 }
 
 @export var beatmap: Beatmap
@@ -108,8 +136,14 @@ const ART := {
 @export var bun_spots := PackedVector2Array([Vector2(170, 234), Vector2(218, 249), Vector2(265, 264), Vector2(313, 279)])
 ## How big a patty looks on its bun, compared to on the grill.
 @export var bun_patty_scale := 0.75
-## Where the squirrel and rabbit come from / run off to (screen x, off the left edge).
-@export var critter_exit_x := -120.0
+## Where the squirrel comes from / runs off to (screen x, off the left edge).
+@export var critter_exit_x := -240.0
+## Where the bear waits / backs off to (his chin, screen x) -- far enough that he's all off screen.
+@export var bear_exit_x := -110.0
+## How big the bear is (1 = the size he'd be standing in front of the table). Smaller = further back.
+@export var bear_scale := 0.6
+## Nudge where he stops (screen px). By default his paw lands right on the burger.
+@export var bear_reach := Vector2.ZERO
 @export var salt_pos := Vector2(409, 253)            ## the salt shaker on the table (its middle)
 @export var pepper_pos := Vector2(450, 270)          ## the pepper shaker next to it
 ## The picnic table, behind the grill: where it sits in your Krita scene.
@@ -172,6 +206,13 @@ var _step_ok := 0                  ## practice: clean tries so far
 var _tally := {"Perfect": 0, "Good": 0, "Miss": 0}
 var _results: Results
 var _finished := false
+## After the song ends the music's clock stops, so the last burgers keep going on
+## this one (seconds since the end; -1 = still playing) until every critter is
+## gone and the buns are back -- then the results.
+var _outro := -1.0
+var _outro_pos := 0.0              ## song position when the music ended
+var _calm := 0.0                   ## seconds since the last burger left the table
+const OUTRO_REST := 0.8            ## ...how long to look at the fresh buns before the results
 var _fx: Array = []                ## { kind, t0, pos, seed }
 
 var _frames := {}                  ## part name -> Array[Texture2D] (frames 0..FLIP_LAND)
@@ -190,9 +231,12 @@ var _panel_sb: StyleBoxFlat
 var _back_layer: Node2D            ## behind the grill: the picnic table + shakers
 var _fx_layer: Node2D              ## steam and smoke, over the patties, under the tongs
 var _critter_layer: Node2D         ## the burger thieves: over the table, under a carried burger
+var _behind_layer: Node2D          ## critters in BEHIND_TABLE: under the table
 var _critters: Array = []          ## { kind, patty, t0, catch_t, end_t, at, pos, face, alpha }
 var _steal_n := 0                  ## burgers stolen so far (picks the next steal in STEALS)
 var _frame_c: Array[Vector2] = []  ## flip_patty frame i: where the patty is vs. frame 0 (texture px)
+var _burger_k := 1.0               ## burger PNG px -> Stage px
+var _bun_gone := {}                ## bun spot -> true once the song's last burger on it was carried off
 var _ui_layer: Node2D              ## practice strip, cards, results: over everything
 var _pause: PauseMenu
 
@@ -206,10 +250,14 @@ func _ready() -> void:
 	add_child(_back_layer)
 	move_child(_back_layer, _stage.get_index())
 	_back_layer.draw.connect(_draw_back)
+	_behind_layer = Node2D.new()
+	add_child(_behind_layer)
+	move_child(_behind_layer, _back_layer.get_index())
+	_behind_layer.draw.connect(func(): _draw_critters(_behind_layer, true))
 	_critter_layer = Node2D.new()
 	_critter_layer.z_index = 1         # over a burger on its bun (z 0), under a carried / flying one (z 2)
 	add_child(_critter_layer)
-	_critter_layer.draw.connect(_draw_critters)
+	_critter_layer.draw.connect(func(): _draw_critters(_critter_layer, false))
 	_fx_layer = Node2D.new()
 	add_child(_fx_layer)
 	_fx_layer.draw.connect(_draw_fx)
@@ -249,6 +297,9 @@ func _ready() -> void:
 	for tex: Texture2D in _frames["flip_patty"]:
 		_frame_c.append(Rect2(tex.get_image().get_used_rect()).get_center() - _patty_c)
 	_home = _stage.position + (DRAWING_AT + _patty_c) * _stage.scale.x
+	# your burger drawing, sized so its patty is as wide as the patty you flip onto it
+	var landed_w: float = (_frames["flip_patty"][0] as Texture2D).get_image().get_used_rect().size.x * bun_patty_scale
+	_burger_k = landed_w / BUN_PATTY.size.x
 	var tong_mat := ShaderMaterial.new()      # just the outline (the tongs are grey)
 	tong_mat.shader = COOK_SHADER
 	_back = _make_sprite(1, tong_mat)
@@ -324,12 +375,15 @@ func _reset_round() -> void:
 			p["sprite"].queue_free()
 	_patties.clear()
 	_critters.clear()
+	_bun_gone.clear()
 	_steal_n = 0
 	_answers.clear()
 	_cycles.clear()
 	_fx.clear()
 	_flip = {}
 	_finished = false
+	_outro = -1.0
+	_calm = 0.0
 	_tally = {"Perfect": 0, "Good": 0, "Miss": 0}
 	if _results:
 		_results.reset()
@@ -487,7 +541,8 @@ func _new_patty(spot: int, beat: float, cyc: Variant) -> Dictionary:
 
 func _on_song_finished() -> void:
 	if _phase == Phase.SONG:
-		_finished = true
+		_outro = 0.0                   # results once the last steals are done (_process)
+		_outro_pos = Conductor.song_position
 	elif _phase == Phase.SHOT:
 		_start_shots()                 # the metronome ran out (a very long wait): start over
 	elif _phase == Phase.CARD and card_demo:
@@ -544,6 +599,10 @@ func _process(dt: float) -> void:
 		if _phase == Phase.PRACTICE:
 			_schedule_practice()
 		var now: float = Conductor.song_position
+		if _outro >= 0.0:                  # the music's over: carry on by frame time (stops when paused)
+			_outro += dt
+			now = _outro_pos + _outro
+		var vis: float = now + Conductor.video_offset
 		var latency := AudioServer.get_output_latency()
 		if _phase == Phase.SHOT:
 			_update_shots(now)
@@ -561,13 +620,20 @@ func _process(dt: float) -> void:
 		while not _answers.is_empty() and not (_phase == Phase.SHOT and _shot_hold) \
 				and now > _answers[0]["time"] + Conductor.input_offset + GOOD + MISS_TAIL:
 			_miss(_answers.pop_front())
-		_drive_patties(Conductor.visual_position)
-		_drive_critters(Conductor.visual_position)
+		_drive_patties(vis)
+		_drive_critters(vis)
 		_fx = _fx.filter(func(f): return now - f["t0"] < 1.5)
+		if _outro >= 0.0 and not _finished:
+			var busy := not _critters.is_empty() or _patties.any(
+				func(p): return p["state"] in ["flip", "bun", "carried"])
+			_calm = 0.0 if busy else _calm + dt
+			if _calm >= OUTRO_REST or _outro > 10.0:
+				_finished = true
 	_drive_tongs(Conductor.visual_position, dt)   # on the card too, so they're there from the start
 	_back_layer.queue_redraw()
 	_fx_layer.queue_redraw()
 	_critter_layer.queue_redraw()
+	_behind_layer.queue_redraw()
 	_ui_layer.queue_redraw()
 
 
@@ -621,6 +687,10 @@ func _drive_patties(vis: float) -> void:
 				var sq := 0.22 * sin(clampf(u / SQUASH_S, 0.0, 1.0) * PI) * (1.0 - clampf(u / SQUASH_S, 0.0, 1.0))
 				s.position = at
 				s.scale = Vector2(1.0 + sq, 1.0 - sq)
+				# cooks on the grill: raw when it lands, perfectly brown right on its flip beat
+				var due := _flip_due_time(p)
+				if due > p["t0"]:
+					p["mat"].set_shader_parameter("raw", 1.0 - clampf((vis - p["t0"]) / (due - p["t0"]), 0.0, 1.0))
 			"flip":
 				# your drawing up to the top of the toss; on the way down the patty
 				# also travels over to its bun, browning as it goes
@@ -631,17 +701,37 @@ func _drive_patties(vis: float) -> void:
 				s.position = at.lerp(to, smoothstep(0.0, 1.0, k)) 					+ Vector2(0, -THROW_H * sin(PI * k)) / _stage.scale.x
 				s.scale = Vector2.ONE * lerpf(1.0, bun_patty_scale, k)
 				s.texture = _frames["flip_patty"][_flip_frame(u, p["dur"])]
-				p["mat"].set_shader_parameter("raw", 1.0 - clampf(u / p["dur"], 0.0, 1.0))
+				# whatever's left of the raw (an early flip) cooks off in the air
+				p["mat"].set_shader_parameter("raw", p.get("raw_left", 0.0) * (1.0 - clampf(u / p["dur"], 0.0, 1.0)))
 				if p.has("critter") and vis >= p["critter"]["catch_t"]:
-					p["state"] = "carried"         # the flying squirrel got it
+					p["state"] = "carried"         # the bird got it
 					s.texture = _frames["flip_patty"][0]
 				elif u >= p["dur"]:
 					_land(p, vis)
-			"bun":     # sitting on its bun; its critter is on the way
+			"bun":     # sitting on its bun, the top bun dropping on; its critter is on the way
 				s.position = _to_stage(_bun_spot(p["spot"]))
+				var base := _burger_k if p.has("top") else bun_patty_scale
+				var u: float = vis - p["t0"]
+				if p.has("top"):
+					var t: Sprite2D = p["top"]
+					var k := clampf((vis - (p["top_t"] - TOP_BUN_DROP_S)) / TOP_BUN_DROP_S, 0.0, 1.0)
+					t.visible = k > 0.0
+					t.position = Vector2(0, -TOP_BUN_DROP_H * (1.0 - k * k))
+					if k >= 1.0 and not p.get("top_on", false):
+						p["top_on"] = true
+						_play("top_bun", -6.0)
+					if p.get("top_on", false):
+						u = vis - p["top_t"]       # squash again when the top bun lands
+				var q := clampf(u / SQUASH_S, 0.0, 1.0)
+				var sq := 0.15 * sin(q * PI) * (1.0 - q)
+				s.scale = Vector2(1.0 + sq, 1.0 - sq) * base
 				if vis >= p["critter"]["catch_t"]:
 					p["state"] = "carried"
 					s.z_index = 2
+					s.scale = Vector2.ONE * base
+					if p.has("top"):
+						(p["top"] as Sprite2D).visible = true
+						(p["top"] as Sprite2D).position = Vector2.ZERO
 			"carried": # in a critter's mouth (_drive_critters moves it)
 				pass
 			"burnt":
@@ -673,6 +763,22 @@ func _bun_spot(i: int) -> Vector2:
 	return bun_spots[clampi(i, 0, bun_spots.size() - 1)]
 
 
+## When patty `p` is due to be flipped (song seconds), or -1 if it isn't waiting for a flip.
+func _flip_due_time(p: Dictionary) -> float:
+	for a in _answers:
+		if a["patty"] == p:
+			return a["time"]
+	return -1.0
+
+
+## Is bun `i` part of a finished burger right now (on the table or in a critter's mouth)?
+func _bun_taken(i: int) -> bool:
+	for p in _patties:
+		if p["spot"] == i and p.has("top") and p["state"] in ["bun", "carried"]:
+			return true
+	return false
+
+
 ## The patty lands on its bun. Anything still on that bun is taken first.
 func _land(p: Dictionary, vis: float) -> void:
 	p["state"] = "bun"
@@ -684,22 +790,38 @@ func _land(p: Dictionary, vis: float) -> void:
 	s.position = _to_stage(_bun_spot(p["spot"]))
 	s.z_index = 0
 	_play("bun", -6.0)
+	# your drawing takes over: the patty on its bun, and the top bun on its way down
+	var burger := _tex("burger")
+	var top := _tex("top_bun")
+	if burger and top:
+		s.material = null
+		s.texture = burger
+		s.offset = -BUN_PATTY.get_center()
+		s.scale = Vector2.ONE * _burger_k
+		var t := Sprite2D.new()
+		t.centered = false
+		t.offset = s.offset
+		t.texture = top
+		t.visible = false
+		s.add_child(t)
+		p["top"] = t
+		p["top_t"] = vis + TOP_BUN_AFTER * Conductor.seconds_per_beat
 	_send_critter(p, vis)
 
 
 # --- critters steal the burgers -----------------------------------------------------
 # Each burger gets the next steal in STEALS. A critter comes in (STEAL_BEATS[0]),
 # grabs the burger at `catch_t`, and leaves with it in its mouth (STEAL_BEATS[1]).
-# Most come once the burger is on its bun; the flying squirrel is sent at your
+# Most come once the burger is on its bun; the bird is sent at your
 # press so it can catch the patty mid-flip. Art slots: art/grilling/critters/.
 
-## Pick patty `p`'s steal (on your press). The flying squirrel sets off now; the
+## Pick patty `p`'s steal (on your press). The bird sets off now; the
 ## others wait for the burger to land on its bun (`_send_critter`).
 func _pick_steal(p: Dictionary) -> void:
 	p["steal"] = STEALS[_steal_n % STEALS.size()]
 	_steal_n += 1
-	if p["steal"] == "flying_squirrel":
-		_add_critter(p, "flying_squirrel", p["t0"] + FLY_CATCH * Conductor.seconds_per_beat)
+	if p["steal"] == "bird":
+		_add_critter(p, "bird", p["t0"] + FLY_CATCH * Conductor.seconds_per_beat)
 
 
 func _send_critter(p: Dictionary, vis: float) -> void:
@@ -745,12 +867,7 @@ func _drive_critters(vis: float) -> void:
 				pos = b.lerp(from, k * k) if leaving else from.lerp(b, 1.0 - (1.0 - k) * (1.0 - k))
 				pos.y -= 6.0 * absf(sin(k * PI * 6.0))
 				face = -1.0 if leaving else 1.0
-			"rabbit":            # three hops in, three hops out
-				var from := Vector2(critter_exit_x, b.y)
-				pos = b.lerp(from, k) if leaving else from.lerp(b, k)
-				pos.y -= 55.0 * absf(sin(k * PI * 3.0))
-				face = -1.0 if leaving else 1.0
-			"flying_squirrel":   # swoops down from the top left onto the patty, then off right and up
+			"bird":              # swoops down from the top left onto the patty, then off right and up
 				var p: Dictionary = c["patty"]
 				if not leaving:
 					var meet: Vector2 = _patty_screen(p) if is_instance_valid(p["sprite"]) else b
@@ -758,41 +875,76 @@ func _drive_critters(vis: float) -> void:
 					pos = Vector2(-100, -80).lerp(meet, u) + Vector2(0, 60.0 * sin(u * PI))
 				else:
 					pos = (c.get("meet", b) as Vector2).lerp(Vector2(VP.x + 140, -120), v * v)
-			"raccoon":           # up from under the table, grab, back down
-				var under := b + Vector2(0, 150)
+			"raccoon":           # pops up from behind the table, grab, sinks back down
+				var under := b + Vector2(0, 110)
 				pos = b.lerp(under, k * k) if leaving else under.lerp(b, 1.0 - (1.0 - k) * (1.0 - k))
 				alpha = clampf((1.0 - k) * 4.0, 0.0, 1.0) if leaving else clampf(k * 4.0, 0.0, 1.0)
-			"mi_squirrel":       # down on a rope from the sky, yanked back up
-				var top := Vector2(b.x, -110)
-				pos = b.lerp(top, k * k) if leaving else top.lerp(b, 1.0 - pow(1.0 - k, 3.0))
+			"bear":              # walks in, arm grabs, lifts to mouth, chomp, chew, backs out
+				var sc := BEAR_PX * bear_scale
+				var stop := b + bear_reach - sc * (BEAR_SHOULDER - BEAR_CHIN + (BEAR_PAW - BEAR_SHOULDER).rotated(BEAR_GRAB))
+				var from := Vector2(bear_exit_x, stop.y + 20)
+				var arm := 0.0
+				if not leaving:
+					pos = from.lerp(stop, 1.0 - (1.0 - k) * (1.0 - k))
+					pos.y -= 6.0 * absf(sin(k * PI * 3.0))       # lumbering steps
+					arm = BEAR_GRAB * smoothstep(0.55, 1.0, k)    # reaching for it
+				elif v < BEAR_LIFT:
+					pos = stop
+					arm = lerpf(BEAR_GRAB, BEAR_MOUTH, smoothstep(0.0, 1.0, v / BEAR_LIFT))
+				elif v < BEAR_CHEW:
+					var w := (v - BEAR_LIFT) / (BEAR_CHEW - BEAR_LIFT)
+					pos = stop + Vector2(0, 8.0 * absf(sin(w * PI * 3.0)))    # chomp, chew, chew
+					arm = BEAR_MOUTH * (1.0 - smoothstep(0.0, 0.7, w))
+				else:
+					var w := (v - BEAR_CHEW) / (1.0 - BEAR_CHEW)
+					pos = stop.lerp(from, w * w)
+				c["arm"] = arm
+				c["paw"] = pos + sc * (BEAR_SHOULDER - BEAR_CHIN + (BEAR_PAW - BEAR_SHOULDER).rotated(arm))
 		c["pos"] = pos
 		c["face"] = face
 		c["alpha"] = alpha
 		var pt: Dictionary = c["patty"]
-		if leaving and pt["state"] == "carried" and is_instance_valid(pt["sprite"]):
+		if c["kind"] == "bear" and leaving and pt["state"] == "carried" and is_instance_valid(pt["sprite"]):
+			# in his paw up to his mouth, then squashed flat by the chomp and gone
+			var s: Sprite2D = pt["sprite"]
+			var chomp_t: float = c["catch_t"] + BEAR_LIFT * (c["end_t"] - c["catch_t"])
+			var e := clampf((vis - chomp_t) / BEAR_CHOMP_S, 0.0, 1.0)
+			var base := _burger_k if pt.has("top") else bun_patty_scale
+			s.z_index = 2
+			if e <= 0.0:
+				s.position = _to_stage(c["paw"])
+			s.scale = Vector2(1.0 + 0.3 * e, 1.0 - e) * base
+			s.visible = e < 1.0
+		elif leaving and pt["state"] == "carried" and is_instance_valid(pt["sprite"]):
 			var s: Sprite2D = pt["sprite"]
 			s.z_index = 2
 			s.position = _to_stage(pos)
-			s.scale = Vector2.ONE * bun_patty_scale
+			s.scale = Vector2.ONE * (_burger_k if pt.has("top") else bun_patty_scale)
 			s.modulate.a = alpha
 		if vis >= c["end_t"]:
 			pt["state"] = "gone"
+			# the song's last burger off this bun: the bun went with it, and no new one comes
+			if _phase == Phase.SONG and pt.has("top") and not _patties.any(
+					func(q): return q["spot"] == pt["spot"] and q["state"] in ["wait", "drop", "raw", "flip"]):
+				_bun_gone[pt["spot"]] = true
 	_critters = _critters.filter(func(c): return vis < c["end_t"])
 
 
 ## The critters (labelled placeholder boxes until you draw them), facing the way they go.
-func _draw_critters() -> void:
-	var l := _critter_layer
+func _draw_critters(l: Node2D, behind: bool) -> void:
 	for c in _critters:
 		if Conductor.visual_position < c["t0"]:
 			continue
-		var pos: Vector2 = c["pos"]
-		if c["kind"] == "mi_squirrel":     # the rope
-			l.draw_line(Vector2(pos.x, -10), pos + Vector2(0, -70), Color(INK, 0.8), 3.0)
-		l.draw_set_transform(pos, 0.0, Vector2(c["face"], 1.0))
 		var box: Rect2 = ART[c["kind"]][1]
 		var tex := _tex(c["kind"])
 		var a: float = c["alpha"]
+		if tex and c["kind"] == "bear":
+			_draw_bear(l, c, tex, behind)      # body behind the table, arm over it once raised
+			continue
+		if (c["kind"] in BEHIND_TABLE) != behind:
+			continue
+		var pos: Vector2 = c["pos"]
+		l.draw_set_transform(pos, 0.0, Vector2(c["face"], 1.0))
 		if tex:
 			var k := minf(box.size.x / tex.get_width(), box.size.y / tex.get_height())
 			var sz := Vector2(tex.get_width(), tex.get_height()) * k
@@ -800,6 +952,39 @@ func _draw_critters() -> void:
 		else:
 			_placeholder(l, box, c["kind"], a, 1.0)
 		l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## The bear, in bear.png px. Behind the table: his body (and his arm while it hangs
+## down behind it); over the table: his front leg, and his arm once it's reaching up.
+func _draw_bear(l: Node2D, c: Dictionary, tex: Texture2D, behind: bool) -> void:
+	var arm_tex := _tex("bear_arm")
+	var ang: float = c.get("arm", 0.0)
+	var arm_front := absf(ang) > BEAR_ARM_FRONT
+	var sc := BEAR_PX * bear_scale
+	var col := Color(1, 1, 1, c["alpha"])
+	var h := float(tex.get_height())
+	var w := float(tex.get_width())
+	var draw_arm := func():         # turned around his shoulder
+		var at: Vector2 = c["pos"] + sc * (BEAR_SHOULDER - BEAR_CHIN)
+		l.draw_set_transform(at, ang, Vector2(sc, sc))
+		l.draw_texture(arm_tex, -BEAR_SHOULDER, col)
+	if behind:
+		if arm_tex and not arm_front:
+			draw_arm.call()            # hanging down behind his body
+		l.draw_set_transform(c["pos"], 0.0, Vector2(sc, sc))
+		var o := -BEAR_CHIN
+		# his body runs on off the left of the screen: stretch the cut edge out there
+		l.draw_texture_rect_region(tex, Rect2(o.x - 4000.0, o.y, 4000.0 + BEAR_CUT, h), Rect2(BEAR_CUT, 0, 2, h), col)
+		l.draw_texture_rect_region(tex, Rect2(o.x + BEAR_CUT, o.y, w - BEAR_CUT, h),
+			Rect2(BEAR_CUT, 0, w - BEAR_CUT, h), col)
+	else:
+		# his front leg again, over the table, so it's in front of the table's leg
+		l.draw_set_transform(c["pos"], 0.0, Vector2(sc, sc))
+		l.draw_texture_rect_region(tex, Rect2(BEAR_FRONT_LEG.position - BEAR_CHIN, BEAR_FRONT_LEG.size),
+			BEAR_FRONT_LEG, col)
+		if arm_tex and arm_front:
+			draw_arm.call()            # reaching up, over the table and his leg
+	l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## Your tongs: the flip at a patty's spot while one is going, else the ready pose
@@ -888,6 +1073,8 @@ func _hit(a: Dictionary, err: float) -> void:
 	if p["state"] in ["wait", "drop"]:
 		return
 	p["state"] = "flip"
+	if p.get("mat") != null:
+		p["raw_left"] = float(p["mat"].get_shader_parameter("raw"))
 	p["t0"] = Conductor.visual_position
 	p["dur"] = FLIP_BEATS * Conductor.seconds_per_beat
 	# the tongs: the same motion, hurried if the next flip is due before it would end
@@ -965,8 +1152,16 @@ func _draw_back() -> void:
 		l.draw_texture_rect(tex, Rect2(table_rect.get_center() - sz * 0.5, sz), false)
 	else:
 		_placeholder(l, table_rect, "picnic_table", 1.0, 1.0)
-	for b in bun_spots:
-		_draw_art(l, "bun", b, 1.0)
+	var bun := _tex("bun")
+	for i in bun_spots.size():
+		if _bun_taken(i) or _bun_gone.has(i):
+			continue                 # its burger (your drawing, bun and all) is sitting there / being carried off
+		if bun:
+			var k := _burger_k * _stage.scale.x
+			l.draw_texture_rect(bun, Rect2(bun_spots[i] - BUN_PATTY.get_center() * k,
+				Vector2(bun.get_width(), bun.get_height()) * k), false)
+		else:
+			_draw_art(l, "bun", bun_spots[i], 1.0)
 	for season in ["salt", "pepper"]:
 		var p: Vector2 = salt_pos if season == "salt" else pepper_pos
 		var pts := PackedVector2Array()

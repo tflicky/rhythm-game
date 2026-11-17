@@ -20,8 +20,8 @@ const HINT := Color(0.6, 0.32, 0.08)       ## the caption's second line
 const CAPTION_SIZE := Vector2(376, 112)
 const TAP_HALF := Vector2(48, 28)          ## smallest half-size (longer words make it wider)
 const SKIP_SIZE := Vector2(150, 54)        ## the phone's Skip button
-const GAP := 12.0                          ## the closing box's gap around the press box when it wraps it
-const FAR := 3.0                           ## ...and how many times bigger it starts
+const BORDER := 4.0                        ## the press box's border width -- the closing box lands right on it
+const FAR := 3.0                           ## how many times bigger the closing box starts
 const SELF_PATH := "res://scripts/tutorial_ui.gd"
 
 # LAYOUT -- written by the F3 drag mode; you can also type numbers here.
@@ -91,7 +91,7 @@ static func tap_box(ci: CanvasItem, live: bool, c := Vector2.INF, col := HOT, ke
 	var text := label(key)
 	var half := _half(text)
 	var cap := Rect2(c - half, half * 2.0)
-	ci.draw_rect(cap.grow(4), col if live else Color(col, 0.4))
+	ci.draw_rect(cap.grow(BORDER), col if live else Color(col, 0.4))
 	ci.draw_rect(cap, Color(1, 0.97, 0.88, 1.0 if live else 0.5))
 	ci.draw_string(ThemeDB.fallback_font, Vector2(cap.position.x, cap.position.y + 39), text,
 		HORIZONTAL_ALIGNMENT_CENTER, cap.size.x, 30, Color(INK, 1.0 if live else 0.5))
@@ -103,16 +103,17 @@ static func square(ci: CanvasItem, left: float, frozen: bool, late_ok: float,
 		c := Vector2.INF, col := HOT, key := "SPACE") -> void:
 	if c == Vector2.INF:
 		c = tap_at
-	var hug := _half(label(key)) + Vector2(GAP, GAP)
+	# the middle of the press box's border: a BORDER-wide line here covers it exactly
+	var hug := _half(label(key)) + Vector2.ONE * (BORDER * 0.5)
 	if frozen:
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 2.0)
-		_rect(ci, c, hug + Vector2(6, 6) * pulse, col, 6.0)
+		_rect(ci, c, hug + Vector2(6, 6) * pulse, col, BORDER)
 		return
 	var lead := 2.0 * Conductor.seconds_per_beat
 	if left > lead or left < -late_ok:
 		return
 	var k := clampf(left / lead, 0.0, 1.0)
-	_rect(ci, c, hug * lerpf(1.0, FAR, k), Color(col, 1.0 - 0.6 * k), lerpf(7.0, 3.0, k))
+	_rect(ci, c, hug * lerpf(1.0, FAR, k), Color(col, 1.0 - 0.6 * k), BORDER)
 
 
 static func _rect(ci: CanvasItem, c: Vector2, half: Vector2, col: Color, width: float) -> void:

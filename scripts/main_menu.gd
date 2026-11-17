@@ -1,7 +1,7 @@
 extends Control
 ## Level select: one big card per level, side by side. Built in code so adding a
 ## level is one entry in LEVELS.
-##   Left/Right or mouse to pick, Enter/Space/click to play, Down for Calibrate.
+##   Left/Right or mouse to pick, Enter/Space/click to play, Down for Calibrate / Credits.
 ##   Esc in a level comes back here.
 ## A level whose scene doesn't exist yet shows as "coming soon" and can't be picked.
 ##
@@ -118,7 +118,22 @@ func _ready() -> void:
 	_colour_button(cal, Color(0.42, 0.5, 0.62), 24)
 	cal.pressed.connect(_play.bind("res://Calibrate.tscn"))
 	cal.mouse_entered.connect(cal.grab_focus)
-	col.add_child(cal)
+
+	var credits := Button.new()
+	credits.text = "Credits"
+	credits.custom_minimum_size = Vector2(160, 48)
+	credits.focus_mode = Control.FOCUS_ALL
+	credits.add_theme_font_size_override("font_size", 18)
+	_colour_button(credits, Color(0.62, 0.45, 0.55), 24)
+	credits.pressed.connect(_play.bind("res://Credits.tscn"))
+	credits.mouse_entered.connect(credits.grab_focus)
+
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 16)
+	buttons.add_child(cal)
+	buttons.add_child(credits)
+	col.add_child(buttons)
 
 	var hint := Label.new()
 	hint.text = "Tap a game to play  -  II (or Esc) in a level to pause"
@@ -131,6 +146,7 @@ func _ready() -> void:
 	for c in _cards:
 		c.focus_neighbor_bottom = cal.get_path()
 	cal.focus_neighbor_top = _cards[0].get_path()
+	credits.focus_neighbor_top = _cards[-1].get_path()
 
 	for c in _cards:
 		if not c.disabled:

@@ -330,8 +330,13 @@ func _process(_dt: float) -> void:
 		_warn_next += 1
 		# A banana pair is two adjacent cues -- only the first plays a cue at
 		# all (the tap-tap warns "two coming"); the second spawns silently.
+		# (pairs are counted off in twos, so back-to-back pairs -- banana
+		# practice -- each still get their tap-tap and tree bump)
 		var is_second_banana: bool = nc["cue"] == "banana" and wi > 0 \
-			and cues[wi - 1]["cue"] == "banana"
+			and cues[wi - 1]["cue"] == "banana" \
+			and not cues[wi - 1].get("second", false) \
+			and nc["beat"] - cues[wi - 1]["beat"] <= 1.5
+		nc["second"] = is_second_banana
 		if not is_second_banana:
 			_play(sfx_cue, banana_cue_pitch if nc["cue"] == "banana" else 1.0, sfx_cue_db)
 			_bump_t = nc["time"] - cue_lead * spb
@@ -946,19 +951,14 @@ func _draw_you_label() -> void:
 
 func _draw_practice() -> void:
 	var font := ThemeDB.fallback_font
-	var box := Rect2(VP.x - 400, 24, 376, 282)
+	var box := Rect2(VP.x - 400, 24, 376, 216)
 	var ink := Color(0.2, 0.14, 0.12)
 	var x := box.position.x
 	var y := box.position.y
 	var w := box.size.x
 	draw_style_box(_panel_sb, box)
-	draw_string(font, Vector2(x, y + 48), "PRACTICE", HORIZONTAL_ALIGNMENT_CENTER, w, 34, ink)
-	var lines: Array = ["Listen for the cue sound,", "then press SPACEBAR to catch", "the coconut on the beat!"]
-	if practice_kind == "banana":
-		lines = ["Tap-tap means two bananas!", "Press SPACEBAR twice to catch", "them, in the same rhythm!"]
-	for i in lines.size():
-		draw_string(font, Vector2(x, y + 86 + 28 * i), lines[i], HORIZONTAL_ALIGNMENT_CENTER, w, 22, ink)
-	draw_string(font, Vector2(x, y + 266), ("Tap Skip to skip practice" if TutorialUI.is_touch() else "Press S to skip practice"), HORIZONTAL_ALIGNMENT_CENTER, w, 18, Color(ink, 0.6))
+	draw_string(font, Vector2(x, y + 64), "CATCH IT!!!!", HORIZONTAL_ALIGNMENT_CENTER, w, 44, ink)
+	draw_string(font, Vector2(x, y + 200), ("Tap Skip to skip practice" if TutorialUI.is_touch() else "Press S to skip practice"), HORIZONTAL_ALIGNMENT_CENTER, w, 18, Color(ink, 0.6))
 	# one fruit per catch needed; filled in as they're caught
 	var fruit: Texture2D = art_banana if practice_kind == "banana" else art_coconut
 	var r := 16.0
@@ -966,7 +966,7 @@ func _draw_practice() -> void:
 	var gap := 84.0 if practice_goal <= 3 else 72.0
 	var cx := x + w * 0.5 - gap * (practice_goal - 1) * 0.5
 	for i in practice_goal:
-		var c := Vector2(cx + gap * i, y + 202)
+		var c := Vector2(cx + gap * i, y + 136)
 		if i < practice_caught:
 			if fruit:
 				# crop to the fruit itself -- the PNG has a lot of empty margin
