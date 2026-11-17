@@ -93,6 +93,11 @@ const BEAR_CUT := 96.0
 ## Critters drawn BEHIND the picnic table (it hides their legs) instead of over it.
 const BEHIND_TABLE := ["bear", "raccoon"]
 const FLY_CATCH := 1.8             ## beats after your press the bird catches the patty
+## How big each critter is drawn, vs. its Krita size (missing = 1).
+const CRITTER_SCALE := {"squirrel": 0.6, "bird": 0.55}
+## Critters that hold it in their mouth: [where its middle sits from the mouth (screen px),
+## how big it is then (patty scale)]. It's drawn under them, so the beak/lips overlap it.
+const CARRY := {"bird": [Vector2(22, 6), 0.4]}
 const BURN_S := 0.25               ## a missed patty chars over this long...
 const BURN_FADE_AFTER := 0.7       ## ...then after this long fades away
 const BURN_FADE_S := 0.4
@@ -871,6 +876,7 @@ func _drive_critters(vis: float) -> void:
 				var p: Dictionary = c["patty"]
 				if not leaving:
 					var meet: Vector2 = _patty_screen(p) if is_instance_valid(p["sprite"]) else b
+					meet -= CARRY["bird"][0]     # so the patty ends up in its beak
 					c["meet"] = meet
 					pos = Vector2(-100, -80).lerp(meet, u) + Vector2(0, 60.0 * sin(u * PI))
 				else:
@@ -920,6 +926,12 @@ func _drive_critters(vis: float) -> void:
 			s.z_index = 2
 			s.position = _to_stage(pos)
 			s.scale = Vector2.ONE * (_burger_k if pt.has("top") else bun_patty_scale)
+			if CARRY.has(c["kind"]):         # in its mouth, under its beak
+				var cr: Array = CARRY[c["kind"]]
+				s.z_index = 0
+				s.position = _to_stage(pos + (cr[0] as Vector2) * Vector2(face, 1.0))
+				var shrink := clampf((vis - c["catch_t"]) / 0.12, 0.0, 1.0)   # shrinks into its beak
+				s.scale = Vector2.ONE * lerpf(s.scale.x, float(cr[1]), shrink)
 			s.modulate.a = alpha
 		if vis >= c["end_t"]:
 			pt["state"] = "gone"
@@ -944,7 +956,7 @@ func _draw_critters(l: Node2D, behind: bool) -> void:
 		if (c["kind"] in BEHIND_TABLE) != behind:
 			continue
 		var pos: Vector2 = c["pos"]
-		l.draw_set_transform(pos, 0.0, Vector2(c["face"], 1.0))
+		l.draw_set_transform(pos, 0.0, Vector2(c["face"], 1.0) * float(CRITTER_SCALE.get(c["kind"], 1.0)))
 		if tex:
 			var k := minf(box.size.x / tex.get_width(), box.size.y / tex.get_height())
 			var sz := Vector2(tex.get_width(), tex.get_height()) * k

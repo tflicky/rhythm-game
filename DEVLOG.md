@@ -615,3 +615,22 @@ cast is now Monkey, Bonkey, Surfkey, Squirrel, Dave, Raccoon, Bear, Gnome, then
 "Made by Tommy Flick" and "Thanks for playing!".
 
 **What broke:** nothing.
+
+**Credits in their own worlds.** *"make the credits happen in their respective scenerys and
+make it where it has a their names next to them"*. The scroll became shots: the beach
+(sky, sea, sand, my palm), the backyard (the grill level's field and picnic table) and the
+wizard tower at night, with a fade to black between them. Then *"once theyre on screen
+keep them there and make the others join in like one big family"*: each one pops in and
+stays, so every scenery ends with the whole group together, names above their heads.
+Bonkey bumps the palm on the beat, Surfkey glides in on his wave, *"reveal dave as the
+last guy in the grill section"* so Dave flies in over everyone, and *"make sure to include
+the gnomes hands"*: they sit where they are in my Krita file.
+
+**What broke:**
+- *"the bear should be a little more to the left because his transparent side of his body
+  is showing"*: his flat, cut-off side (and the paw left of it) now hangs off the left edge.
+- The picnic table first drew as a cropped strip (wrong part of the picture); fixed.
+- *"make sure you include the updated raccoon sprite in general"*: `raccoon.png` was older
+  than my latest Krita save, so the game had the raccoon without his arms. Re-exported it
+  from `krita animation.kra` with `tools/kra_export.ps1`; Grill Master uses it too. His
+  grab spot was measured on the old drawing, so check one raccoon steal by eye.
