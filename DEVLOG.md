@@ -793,3 +793,30 @@ the tutorial and not let players spam it"*.
   Screenshots showed it: the squirrel ran in from the left, the same side the bear stands
   on, right through his body. Now the squirrel runs up from the front of the screen.
   (Flipped back to face right as I drew it; its tail just brushes the bear's leg now.)
+
+## Getting ready for Steam's AI disclosure: my sounds in the Wizard level (Nov 18)
+
+Asked when Steam counts a game as "AI". Short answer: Steam doesn't ban it, you
+*disclose* AI-generated content players actually see or hear (art, sound, music,
+text, store art). Code written with an AI helper doesn't count. So I went through
+the game for anything players see or hear that wasn't made by me.
+
+**Already mine:** all the Krita art, the three songs from BandLab, and my recorded
+sounds (sizzle, tong, shaker, pop, coconut thunk). *"the banana sound is just an
+altered pitch of the sound i created, thats not ai generated"* -- right, the
+banana catch is my coconut thunk pitched up, same idea as salt/pepper from the tong.
+
+**Still Claude's stand-ins (my to-do list):**
+- Draw: Wizard sky, hills, enemy tower and wall; monkey beach background, ground,
+  bonk stars, dust puff; grill field backdrop; menu star + checkmark.
+- Record: 7 Wizard sounds, the results drum roll, the count-in tick / metronome click.
+
+**Changed:** the Wizard level can now take my recordings. Drop files into
+`audio/sfx/wizard/` (`launch_fire`, `launch_ice`, `cast_fire`, `cast_ice`,
+`burst_fire`, `burst_ice`, `hurt`) and they replace the synth sounds one at a time
+(`SFX_FILES` + `_load_sfx_files()` in `scripts/wizard_game.gd`, list and tips in
+`audio/sfx/wizard/README.md`). Tested by dropping in the coconut thunk as `hurt.wav`:
+it was picked up, then removed.
+
+**What broke:** nothing. One mix-up: the banana sound got listed as "silent" when
+it actually reuses my thunk at a higher pitch -- corrected.

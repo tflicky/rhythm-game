@@ -177,7 +177,8 @@ func _ready() -> void:
 	for k in ["fire", "ice"]:
 		_sfx["burst_" + k] = _synth_burst(k)
 		_sfx["cast_" + k] = _synth_cast(k)
-	for i in 16:                       # bursts ring ~1.5 s, so leave room for overlaps
+	_load_sfx_files()                  # your recordings replace the synth stand-ins
+	for i in 16:                      # bursts ring ~1.5 s, so leave room for overlaps
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
@@ -1198,6 +1199,25 @@ func _play(key: String, db: float) -> AudioStreamPlayer:
 	p.volume_db = db
 	p.play()
 	return p
+
+
+## Your sound files, in res://audio/sfx/wizard/ (see the README there):
+## sound key -> file name (any of .wav / .ogg / .mp3). A missing file keeps the
+## synth stand-in, so you can replace them one at a time.
+const SFX_DIR := "res://audio/sfx/wizard/"
+const SFX_FILES := {
+	"fire": "launch_fire", "ice": "launch_ice", "hurt": "hurt",
+	"cast_fire": "cast_fire", "cast_ice": "cast_ice",
+	"burst_fire": "burst_fire", "burst_ice": "burst_ice",
+}
+
+func _load_sfx_files() -> void:
+	for key in SFX_FILES:
+		for ext in ["wav", "ogg", "mp3"]:
+			var path: String = SFX_DIR + SFX_FILES[key] + "." + ext
+			if ResourceLoader.exists(path):
+				_sfx[key] = load(path)
+				break
 
 
 ## Placeholder sounds, synthesised so the prototype needs no files: fire launch =
