@@ -24,6 +24,13 @@ enum Phase { CARD, PRACTICE, SONG, SHOT }
 const PERFECT := 0.075
 const GOOD := 0.15
 const MISS_TAIL := 0.03            ## seconds past the late edge of GOOD before it's a Miss
+## Anti-mash: a press this early (seconds) but outside GOOD fumbles the next burger --
+## it burns, same as a miss. Mashing faster than ~4 presses a second always lands
+## one in here before the real window, so spamming SPACE no longer works.
+const FUMBLE := 0.4
+## Practice shots, while the burgers wait for you (after 2 misses): this many extra
+## presses on one try still spoils it (one or two stray taps are forgiven there).
+const HOLD_STRAYS := 3
 const VP := Vector2(1152, 648)
 const INK := Color(0.2, 0.14, 0.12)
 ## Every sound is a file in SFX_DIR named after its slot (.wav / .ogg / .mp3).
@@ -65,18 +72,31 @@ const TOP_BUN_DROP_H := 140.0      ## ...from this far up (burger PNG px)
 ## so they don't pile up on each other:
 ##   bun 1  bear      walks in from the left behind the table, his arm swings up and
 ##                    grabs it, lifts it to his mouth, EATS it (chomp + chew), backs out
-##   bun 2  squirrel  runs up from the front of the screen, grabs it, runs back down
+##   bun 2  squirrel  runs up from the front of the screen, hops on the table, grabs it, runs back down
 ##   bun 3  raccoon   pops up from behind the table, grabs it, sinks back down
 ##   bun 4  bird      swoops in and catches it in mid-air, before it reaches the bun
 const STEALS := ["bear", "squirrel", "raccoon", "bird"]
 ## Per steal, in beats: [coming in (ends at the grab), leaving with the burger].
 ## The grab lands on a beat (except the bird's, which is mid-flip).
+## These are the FASTEST they go -- only when the beat demands it (the next burger is
+## coming onto the same bun soon). Normally they take the slower STEAL_BEATS_RELAXED.
 const STEAL_BEATS := {
 	"squirrel": [2.0, 2.0],
 	"bird": [1.6, 2.0],
 	"raccoon": [1.5, 2.0],
 	"bear": [2.0, 3.0],
 }
+## The unhurried timings (same layout), used whenever there's room before the next
+## burger lands on that bun. (The bird's coming-in can't stretch: it catches the
+## patty mid-flip, a set time after your press -- only its leaving does.)
+const STEAL_BEATS_RELAXED := {
+	"squirrel": [3.0, 3.0],
+	"bird": [1.6, 3.0],
+	"raccoon": [2.5, 3.0],
+	"bear": [3.0, 4.0],
+}
+## A critter is gone at least this many beats before the next burger lands on its bun.
+const STEAL_ROOM := 0.25
 ## The picnic table's front edge (screen px, left to right). Anything behind the table
 ## (BEHIND_TABLE critters) is hidden below this line, so they look like they're standing behind it.
 const TABLE_FRONT := [Vector2(112, 255), Vector2(160, 282), Vector2(240, 305), Vector2(320, 331),
@@ -88,11 +108,14 @@ const RACCOON_UP := 48.0           ## ...to his mouth this far above the burger 
 const RACCOON_PULL := 0.35
 const RACCOON_SINK := 0.5
 const RACCOON_HOLD := Vector2(0, -14)
-## The squirrel's run (screen px): from off the left on the grass, up onto the table's
-## left end, then along the tabletop to its bun.
-const SQUIRREL_START := Vector2(-140, 300)
-const SQUIRREL_HOP_ON := Vector2(122, 220)
-const SQUIRREL_ON_TABLE := 0.45    ## of its run, this much is on the grass (the rest is on the table)
+## The squirrel's run (screen px, from its bun): up from off the bottom of the screen
+## on the grass, a hop onto the table's front edge, then the last bit to the bun. It
+## comes from the front so it never runs through the bear (who comes in from the left).
+const SQUIRREL_START := Vector2(40, 470)
+const SQUIRREL_HOP_ON := Vector2(12, 55)
+const SQUIRREL_ON_TABLE := 0.75    ## of its run, this much is on the grass (the rest is on the table)
+const SQUIRREL_HOP_H := 60.0       ## how high the hop up onto the table is
+const SQUIRREL_LEAN := -0.35       ## running up the screen: nose tilted up (and down on the way back)
 const CARRY_LIFT_S := 0.12         ## a grabbed burger moves from its bun to the mouth this fast
 const BEAR_CHOMP_S := 0.12         ## the burger squashes into the bear's mouth this fast
 ## The bear's leaving time (0..1): arm lifts the burger to his mouth until LIFT (chomp!),
@@ -162,7 +185,9 @@ const ART := {
 @export var patty_spots := PackedVector2Array([Vector2(660, 332), Vector2(735, 288), Vector2(810, 332), Vector2(872, 288)])
 ## The buns waiting on the picnic table (screen px, where the patty lands).
 ## A flip from patty spot 1 lands on bun 1, and so on.
-@export var bun_spots := PackedVector2Array([Vector2(150, 228), Vector2(222, 250), Vector2(294, 273), Vector2(366, 296)])
+## Spot 4 is the bird's: no bun is drawn there (he catches the patty mid-flip), it's
+## just where that patty flies toward -- so buns 1-3 get the table to themselves.
+@export var bun_spots := PackedVector2Array([Vector2(150, 228), Vector2(265, 264), Vector2(380, 300), Vector2(445, 320)])
 ## How big a patty looks on its bun, compared to on the grill.
 @export var bun_patty_scale := 0.75
 ## Where the bear waits / backs off to (his chin, screen x) -- far enough that he's all off screen.
@@ -222,6 +247,10 @@ var _shot_hold := false            ## this try waits for each press
 var _shot_frozen := false          ## ...and is waiting right now
 var _shot_cyc := {}                ## { you: [0 / 1 hit / 2 missed], failed }
 var _shot_end := 0.0               ## song time this try is judged
+var _shot_why := ""                ## why this try failed: "early" / "late" / "extra" ("" = it didn't)
+var _retry_why := ""               ## ...the last try's, shown on the "Try again!" caption
+var _shot_strays := 0              ## extra presses on this try
+var _pops: Array = []              ## practice feedback words over the grill: { text, t0, pos, col }
 
 var _patties: Array = []           ## { spot, t, beat, state, t0, sprite, mat, sounded, cyc, i }
 var _answers: Array = []           ## { beat, time, patty, cyc, i } -- still to grade, in time order
@@ -431,6 +460,7 @@ func _reset_round() -> void:
 	_answers.clear()
 	_cycles.clear()
 	_fx.clear()
+	_pops.clear()
 	_flip = {}
 	_finished = false
 	_outro = -1.0
@@ -492,6 +522,9 @@ func _queue_shot(step: int, retry: bool) -> void:
 	_shot_fails = _shot_fails + 1 if retry else 0
 	_shot_hold = _shot_fails >= 2
 	_shot_frozen = false
+	_retry_why = _shot_why if retry else ""
+	_shot_why = ""
+	_shot_strays = 0
 	_reset_round()
 	var start := 4.0
 	if Conductor.song_position_in_beats > 0.5:
@@ -868,8 +901,9 @@ func _land(p: Dictionary, vis: float) -> void:
 
 
 # --- critters steal the burgers -----------------------------------------------------
-# Each burger gets the next steal in STEALS. A critter comes in (STEAL_BEATS[0]),
-# grabs the burger at `catch_t`, and leaves with it in its mouth (STEAL_BEATS[1]).
+# Each burger gets the next steal in STEALS. A critter comes in ([0] beats), grabs the
+# burger at `catch_t`, and leaves with it in its mouth ([1] beats) -- taking its time
+# (STEAL_BEATS_RELAXED) unless the next burger for that bun is close (see _fit_steal).
 # Most come once the burger is on its bun; the bird is sent at your
 # press so it can catch the patty mid-flip. Art slots: art/grilling/critters/.
 
@@ -879,20 +913,55 @@ func _pick_steal(p: Dictionary) -> void:
 	p["steal"] = STEALS[clampi(p["spot"], 0, STEALS.size() - 1)]
 	_steal_n += 1
 	if p["steal"] == "bird":
-		_add_critter(p, "bird", p["t0"] + FLY_CATCH * Conductor.seconds_per_beat)
+		var catch_t: float = p["t0"] + FLY_CATCH * Conductor.seconds_per_beat
+		var fit := _fit_steal("bird", p, catch_t, false)
+		_add_critter(p, "bird", catch_t, fit[0], fit[1])
 
 
 func _send_critter(p: Dictionary, vis: float) -> void:
 	if p.has("critter"):
 		return
 	var kind: String = p.get("steal", STEALS[0])
-	_add_critter(p, kind, vis + STEAL_BEATS[kind][0] * Conductor.seconds_per_beat)
+	var fit := _fit_steal(kind, p, vis, true)
+	_add_critter(p, kind, vis + fit[0] * Conductor.seconds_per_beat, fit[0], fit[1])
 
 
-func _add_critter(p: Dictionary, kind: String, catch_t: float) -> void:
+## [coming in, leaving] in beats for `kind` taking patty `p`, starting at `from`
+## (vis time: the landing, or for the bird its catch). The relaxed timings when
+## they fit before the next burger lands on that bun; squeezed toward the fast
+## ones (STEAL_BEATS) only as much as needed. `stretch_in` = false keeps coming-in fixed.
+func _fit_steal(kind: String, p: Dictionary, from: float, stretch_in: bool) -> Array:
+	var spb := Conductor.seconds_per_beat
+	var fast: Array = STEAL_BEATS[kind]
+	var slow: Array = STEAL_BEATS_RELAXED.get(kind, fast)
+	var fin: float = slow[0] if stretch_in else fast[0]
+	var fout: float = slow[1]
+	var room := (_next_land(p) - from) / spb - STEAL_ROOM   # beats free on this bun
+	var need := (fin if stretch_in else 0.0) + fout
+	if room < need:
+		# squeeze both parts by the same share, but never faster than STEAL_BEATS
+		var k := maxf(room, 0.0) / need
+		if stretch_in:
+			fin = maxf(fast[0], floorf(fin * k * 2.0) / 2.0)   # keeps the grab on a beat / an "&"
+		fout = maxf(fast[1], room - (fin if stretch_in else 0.0))
+	return [fin, fout]
+
+
+## When the next burger after `p` lands on the same bun (vis time), or INF if none is coming.
+## A flip that's on time lands FLIP_BEATS after its beat.
+func _next_land(p: Dictionary) -> float:
+	for a in _answers:            # in time order
+		var q: Dictionary = a["patty"]
+		if q != p and q["spot"] == p["spot"]:
+			return a["time"] + Conductor.input_offset + Conductor.video_offset \
+				+ FLIP_BEATS * Conductor.seconds_per_beat
+	return INF
+
+
+func _add_critter(p: Dictionary, kind: String, catch_t: float, in_beats: float, out_beats: float) -> void:
 	var spb := Conductor.seconds_per_beat
 	var c := {"kind": kind, "patty": p, "catch_t": catch_t,
-		"t0": catch_t - STEAL_BEATS[kind][0] * spb, "end_t": catch_t + STEAL_BEATS[kind][1] * spb,
+		"t0": catch_t - in_beats * spb, "end_t": catch_t + out_beats * spb,
 		"at": _bun_spot(p["spot"]), "pos": Vector2(-1000, -1000), "face": 1.0, "alpha": 1.0}
 	p["critter"] = c
 	_critters.append(c)
@@ -920,21 +989,22 @@ func _drive_critters(vis: float) -> void:
 		var face := 1.0
 		var alpha := 1.0
 		match c["kind"]:
-			"squirrel":          # runs in on the grass, hops up onto the table, runs along it; back the same way
+			"squirrel":          # runs up from the front of the screen, hops onto the table, grabs; back down
 				var w := 1.0 - k if leaving else k          # 0 = off screen, 1 = at the bun
 				w = w if leaving else 1.0 - (1.0 - w) * (1.0 - w)   # slows into the grab
 				var seg_a := w < SQUIRREL_ON_TABLE
-				var from: Vector2 = SQUIRREL_START if seg_a else SQUIRREL_HOP_ON
-				var to: Vector2 = SQUIRREL_HOP_ON if seg_a else b
+				var from: Vector2 = b + (SQUIRREL_START if seg_a else SQUIRREL_HOP_ON)
+				var to: Vector2 = b + SQUIRREL_HOP_ON if seg_a else b
 				var f := w / SQUIRREL_ON_TABLE if seg_a else (w - SQUIRREL_ON_TABLE) / (1.0 - SQUIRREL_ON_TABLE)
 				pos = from.lerp(to, f)
 				if seg_a and f > 0.7:                       # the hop up onto the table
 					var t := (f - 0.7) / 0.3
-					pos.y -= 160.0 * t * (1.0 - t)
+					pos.y -= SQUIRREL_HOP_H * 4.0 * t * (1.0 - t)
 				pos.y -= 3.0 * absf(sin(w * PI * 10.0))     # little running steps
-				face = -1.0 if leaving else 1.0
-				# on the table he tilts with it (the same turn works both ways, he's mirrored)
-				c["rot"] = 0.0 if seg_a else (b - SQUIRREL_HOP_ON).angle()
+				# faces right the whole time (as drawn)
+				face = 1.0
+				# nose tilted up the screen on the way in, down on the way back; level on the table
+				c["rot"] = (-SQUIRREL_LEAN if leaving else SQUIRREL_LEAN) if seg_a else 0.0
 			"bird":              # swoops down from the top left onto the patty, then off right and up
 				var p: Dictionary = c["patty"]
 				if not leaving:
@@ -1172,6 +1242,15 @@ func _press() -> void:
 			_hit(a, err)
 			return
 		if err < -GOOD:
+			# just too early for this burger: you fumble it (it burns). This is what
+			# stops mashing -- a mash always puts a press in here before the window.
+			if err >= -FUMBLE and not (_phase == Phase.SHOT and _shot_hold) \
+					and (a["patty"] as Dictionary)["state"] == "raw":
+				_answers.erase(a)
+				_dip_ms = Time.get_ticks_msec()
+				_play("tong", -4.0)
+				_miss(a, "early")
+				return
 			break
 	_stray()
 
@@ -1194,15 +1273,21 @@ func _hit(a: Dictionary, err: float) -> void:
 	_flip = {"patty": p, "t0": p["t0"], "dur": tong_dur}
 	_pick_steal(p)
 	_play("flip", -2.0)
+	_pop("Nice!" if absf(err) <= PERFECT else ("A bit early" if err < 0.0 else "A bit late"),
+		patty_spots[p["spot"]], Color(0.36, 0.62, 0.32) if absf(err) <= PERFECT else Color(0.75, 0.5, 0.1))
 	var cyc: Variant = a["cyc"]
 	if cyc != null:
 		cyc["you"][a["i"]] = 1
 		cyc["taps"].append(a["beat"] + err / Conductor.seconds_per_beat - _answer_bar(cyc))
 
 
-func _miss(a: Dictionary) -> void:
+## `why`: "late" (nobody flipped it in time) or "early" (fumbled by a press just too early).
+func _miss(a: Dictionary, why := "late") -> void:
 	_tally["Miss"] += 1
 	var p: Dictionary = a["patty"]
+	if _phase == Phase.SHOT and _shot_why == "":
+		_shot_why = why
+	_pop("Too early!" if why == "early" else "Too late!", patty_spots[p["spot"]], Color(0.85, 0.2, 0.15))
 	if p["state"] in ["raw", "drop", "wait"]:
 		p["state"] = "burnt"
 		p["t0"] = Conductor.visual_position
@@ -1219,9 +1304,22 @@ func _miss(a: Dictionary) -> void:
 func _stray() -> void:
 	_dip_ms = Time.get_ticks_msec()
 	_play("tong", -4.0)
+	if _phase == Phase.SHOT:
+		# practice shots: pressing when there's nothing to flip spoils the try, so
+		# mashing gets caught here and explained ("Only press when the box closes")
+		if _answers.is_empty() or Conductor.song_position_in_beats < _shot_cyc["start"] - 1.0:
+			return
+		_shot_strays += 1
+		if not _shot_hold or _shot_strays >= HOLD_STRAYS:
+			_shot_cyc["failed"] = true
+			if _shot_why == "":
+				_shot_why = "extra"
+		var at: Vector2 = patty_spots[(_answers[0]["patty"] as Dictionary)["spot"]] if not patty_spots.is_empty() else VP / 2.0
+		_pop("Not yet!", at + Vector2(0, -45), Color(0.85, 0.2, 0.15))   # above the countdown number
+		return
 	if _phase != Phase.PRACTICE:
 		return
-	var b := Conductor.song_position_in_beats - Conductor.input_offset / Conductor.seconds_per_beat
+	var b :=Conductor.song_position_in_beats - Conductor.input_offset / Conductor.seconds_per_beat
 	for cyc in _cycles:
 		var ab := _answer_bar(cyc)
 		if b >= ab - 0.5 and b < ab + 4.0:
@@ -1245,13 +1343,23 @@ func _play(key: String, db: float) -> void:
 	p.play()
 
 
+## Practice only: a word floating up over the grill ("Nice!", "Too early!", ...).
+## The real song stays wordless, like the other levels.
+func _pop(text: String, pos: Vector2, col: Color) -> void:
+	if _phase not in [Phase.SHOT, Phase.PRACTICE]:
+		return
+	var at := pos + Vector2(0, -70)
+	_pops = _pops.filter(func(w): return w["pos"].distance_to(at) > 1.0)   # one word per patty spot
+	_pops.append({"text": text, "t0": Conductor.song_position, "pos": at, "col": col})
+
+
 func _add_fx(kind: String, pos: Vector2) -> void:
 	_fx.append({"kind": kind, "t0": Conductor.song_position, "pos": pos, "seed": randi()})
 
 
 # --- drawing -----------------------------------------------------------------------
 
-## Behind the grill: the picnic table with the salt and pepper on it.
+## Behind the grill: the picnic table and the buns waiting on it.
 func _draw_back() -> void:
 	var l := _back_layer
 	var tex := _tex("picnic_table")
@@ -1265,20 +1373,14 @@ func _draw_back() -> void:
 	for i in bun_spots.size():
 		if _bun_taken(i) or _bun_gone.has(i):
 			continue                 # its burger (your drawing, bun and all) is sitting there / being carried off
+		if i < STEALS.size() and STEALS[i] == "bird":
+			continue                 # no bun for the bird's spot: he catches the patty mid-flip, it never lands
 		if bun:
 			var k := _burger_k * _stage.scale.x
 			l.draw_texture_rect(bun, Rect2(bun_spots[i] - BUN_PATTY.get_center() * k,
 				Vector2(bun.get_width(), bun.get_height()) * k), false)
 		else:
 			_draw_art(l, "bun", bun_spots[i], 1.0)
-	for season in ["salt", "pepper"]:
-		var p: Vector2 = salt_pos if season == "salt" else pepper_pos
-		var pts := PackedVector2Array()
-		for i in 20:
-			var a := TAU * i / 20.0
-			pts.append(p + Vector2(0, 23) + Vector2(cos(a) * 20.0, sin(a) * 5.0))
-		l.draw_colored_polygon(pts, Color(0.35, 0.22, 0.05, 0.35))
-		_draw_art(l, season, p, 1.0)
 
 
 ## Steam, grease bubbles and smoke, over the patties and under the tongs.
@@ -1325,7 +1427,7 @@ func _draw_ui() -> void:
 		var box := Rect2(VP.x / 2 - 200, VP.y / 2 - 95, 400, 220)
 		l.draw_rect(box, Color(0.12, 0.08, 0.06, 0.82))
 		_results.draw_percent(l, font, box.get_center() + Vector2(0, -10), _tally["Perfect"] + _tally["Good"], _answer_total)
-		l.draw_string(font, Vector2(box.position.x, box.end.y - 18), "Tap to play again", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
+		l.draw_string(font, Vector2(box.position.x, box.end.y - 18), _results.hint(), HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
 
 
 func _draw_card(l: Node2D, font: Font) -> void:
@@ -1392,21 +1494,68 @@ func _draw_practice(l: Node2D, font: Font) -> void:
 		else:
 			l.draw_arc(c, 8.0, 0.0, TAU, 24, Color(INK, 0.4), 2.5)
 	l.draw_string(font, Vector2(VP.x - 120, VP.y - 8), "S: skip", HORIZONTAL_ALIGNMENT_RIGHT, 110, 14, Color(INK, 0.45))
+	_draw_pops(l)
 
 
 ## Practice shots: the caption, TAP box and closing square (TutorialUI -- the
 ## same boxes in the same spot in every level). While a burger waits for you,
 ## the square pulses.
 func _draw_shots(l: Node2D, _font: Font) -> void:
+	var key := TutorialUI.label("SPACE")
 	var head := "Try again!" if _shot_retry else "Practice  %d/%d" % [_shot_step + 1, SHOT_PATTERNS.size()]
-	var sub := "Sizzle?  Flip it!" if _shot_step == 0 else "Two sizzles?  Flip both!"
-	TutorialUI.caption(l, head, sub)
+	# what to do, in order: hear the sizzle, wait, press once when the box closes
+	var sub := "Sizzle... then %s on the box!" % key if _shot_step == 0 else "2 sizzles? 2 flips, same beat!"
+	var sub_col := TutorialUI.HINT
+	if _shot_retry and _retry_why != "" and Conductor.song_position_in_beats < _shot_cyc["start"] + 4.0:
+		# until your turn comes round again: why the last try didn't count
+		sub = {"early": "Too early! Wait for the box.", "late": "Too late! Press as it closes.",
+			"extra": "Only press when the box closes!"}[_retry_why]
+		sub_col = Color(0.85, 0.2, 0.15)
+	TutorialUI.caption(l, head, sub, sub_col)
+	_draw_countdowns(l)
+	_draw_pops(l)
 	TutorialUI.skip_hint(l)
 	var live := not _answers.is_empty()
 	TutorialUI.tap_box(l, live)
 	if live:
 		TutorialUI.square(l, _answers[0]["time"] + Conductor.input_offset - Conductor.visual_position,
 			_shot_frozen, GOOD)
+
+
+## Practice shots: a little 4, 3, 2, 1 over each burger on the grill, one number per
+## beat from when it lands, popping on the beat -- flip it on the beat after the 1.
+func _draw_countdowns(l: Node2D) -> void:
+	var font := ThemeDB.fallback_font
+	var spb := Conductor.seconds_per_beat
+	for a in _answers:
+		var p: Dictionary = a["patty"]
+		if p["state"] != "raw" or patty_spots.is_empty():
+			continue
+		# counted on the music's beats (no input_offset), so each number pops with the click
+		var left: float = (a["time"] - Conductor.visual_position) / spb
+		if left <= 0.0 or left > 4.0:
+			continue
+		var n := ceili(left)
+		var pulse := 1.0 + 0.4 * exp(-(float(n) - left) * 8.0)   # pops on each beat, then settles
+		var at: Vector2 = patty_spots[p["spot"]] + Vector2(0, -62)
+		var col := Color(0.95, 0.55, 0.15) if n == 1 else Color(1, 0.88, 0.3)   # the 1 goes orange: get ready
+		l.draw_set_transform(at, 0.0, Vector2(pulse, pulse))
+		l.draw_string_outline(font, Vector2(-40, 14), str(n), HORIZONTAL_ALIGNMENT_CENTER, 80, 40, 9, INK)
+		l.draw_string(font, Vector2(-40, 14), str(n), HORIZONTAL_ALIGNMENT_CENTER, 80, 40, col)
+		l.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## The practice feedback words, floating up and fading over a second.
+func _draw_pops(l: Node2D) -> void:
+	var font := ThemeDB.fallback_font
+	var now := Conductor.song_position
+	_pops = _pops.filter(func(w): return now - w["t0"] < 1.0)
+	for w in _pops:
+		var t: float = maxf(now - w["t0"], 0.0)
+		var pos: Vector2 = w["pos"] + Vector2(-120, -40.0 * t)
+		var a := clampf(1.0 - (t - 0.6) / 0.4, 0.0, 1.0)
+		l.draw_string_outline(font, pos, w["text"], HORIZONTAL_ALIGNMENT_CENTER, 240, 30, 8, Color(1, 0.97, 0.88, a))
+		l.draw_string(font, pos, w["text"], HORIZONTAL_ALIGNMENT_CENTER, 240, 30, Color(w["col"], a))
 
 
 ## One bar as a timeline: a faded lead-in ("4 &" of the bar before, STRIP_LEAD

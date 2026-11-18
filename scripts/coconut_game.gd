@@ -117,7 +117,8 @@ enum Anchor { CENTER, BOTTOM }
 ## through an "SFX" bus with a limiter, so boosting past 0 dB won't clip.
 @export var sfx_cue_db := 4.0
 ## Count-in before the first fruit: "3, 2, 1, GO!" on the beats before its cue.
-@export var count_in := true
+## Off: the song just starts.
+@export var count_in := false
 @export var count_in_db := 0.0
 ## Pitch multiplier for the banana's tap-tap warning (1.0 = same as coconut).
 @export var banana_cue_pitch := 1.5
@@ -187,6 +188,9 @@ var _freeze_last := 0.0
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_next := 0
 var _mbbox := {}   ## monkey Texture2D -> Rect2 of its opaque pixels, for size-normalising poses
+var _first_try_ms := -1            ## when the player first pressed to catch in practice (-1 = not yet)
+const SKIP_HINT_DELAY := 5.0       ## seconds after that first try before "S to skip" fades in
+const SKIP_HINT_FADE := 1.0        ## ...over this long
 var _count: Array = []             ## count-in: [{ beat, text, heard }] -- see _build_count_in
 var _tick: AudioStreamWAV
 
@@ -410,6 +414,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		or (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT)
 	if not pressed or demo or title_card or _finished:
 		return
+	if practice and _first_try_ms < 0:
+		_first_try_ms = Time.get_ticks_msec()
 	if frozen:
 		_catch_frozen()
 		return
@@ -924,7 +930,7 @@ func _draw_results() -> void:
 	draw_rect(box, Color(0, 0, 0, 0.6))
 	var got: int = _tally["Perfect"] + _tally["Good"]
 	_results.draw_percent(self, font, box.get_center() + Vector2(0, -10), got, got + _tally["Miss"])
-	draw_string(font, Vector2(box.position.x, box.end.y - 18), "Tap to play again", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
+	draw_string(font, Vector2(box.position.x, box.end.y - 18), _results.hint(), HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(0.8, 0.8, 0.8))
 
 
 # --- practice round ----------------------------------------------------------
@@ -950,15 +956,14 @@ func _draw_you_label() -> void:
 
 
 func _draw_practice() -> void:
-	var font := ThemeDB.fallback_font
-	var box := Rect2(VP.x - 400, 24, 376, 216)
+	var box := Rect2(VP.x - 400, 24, 376, 204)
 	var ink := Color(0.2, 0.14, 0.12)
 	var x := box.position.x
 	var y := box.position.y
 	var w := box.size.x
 	draw_style_box(_panel_sb, box)
-	draw_string(font, Vector2(x, y + 64), "CATCH IT!!!!", HORIZONTAL_ALIGNMENT_CENTER, w, 44, ink)
-	draw_string(font, Vector2(x, y + 200), ("Tap Skip to skip practice" if TutorialUI.is_touch() else "Press S to skip practice"), HORIZONTAL_ALIGNMENT_CENTER, w, 18, Color(ink, 0.6))
+	_draw_catch_key(x, y + 50, w)
+	_draw_skip_line(Vector2(x, y + 188), w, ink)
 	# one fruit per catch needed; filled in as they're caught
 	var fruit: Texture2D = art_banana if practice_kind == "banana" else art_coconut
 	var r := 16.0
@@ -966,7 +971,7 @@ func _draw_practice() -> void:
 	var gap := 84.0 if practice_goal <= 3 else 72.0
 	var cx := x + w * 0.5 - gap * (practice_goal - 1) * 0.5
 	for i in practice_goal:
-		var c := Vector2(cx + gap * i, y + 136)
+		var c := Vector2(cx + gap * i, y + 126)
 		if i < practice_caught:
 			if fruit:
 				# crop to the fruit itself -- the PNG has a lot of empty margin
@@ -981,15 +986,47 @@ func _draw_practice() -> void:
 			draw_arc(c, r, 0.0, TAU, 32, Color(0.2, 0.14, 0.12, 0.45), 3.0)
 
 
+## "[SPACE] to catch" -- the SPACE key box (TAP on a phone) then the words, the
+## pair centred in a `w`-wide row starting at `x`, its middle at height `cy`.
+func _draw_catch_key(x: float, cy: float, w: float) -> void:
+	var font := ThemeDB.fallback_font
+	var text := "to catch"
+	var size := 26
+	var half: Vector2 = TutorialUI._half(TutorialUI.label("SPACE"))
+	var key_w := (half.x + TutorialUI.BORDER) * 2.0
+	var gap := 14.0
+	var text_w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var left := x + (w - key_w - gap - text_w) * 0.5
+	TutorialUI.tap_box(self, true, Vector2(left + key_w * 0.5, cy))
+	draw_string(font, Vector2(left + key_w + gap, cy + size * 0.35), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.2, 0.14, 0.12))
+
+
+## 0 until the player has tried a catch; then, after SKIP_HINT_DELAY, fades up to 1.
+## S (or the phone's Skip button) works the whole time -- this only says so.
+func skip_hint_alpha() -> float:
+	if _first_try_ms < 0:
+		return 0.0
+	var t := (Time.get_ticks_msec() - _first_try_ms) / 1000.0 - SKIP_HINT_DELAY
+	return clampf(t / SKIP_HINT_FADE, 0.0, 1.0)
+
+
+func _draw_skip_line(pos: Vector2, w: float, ink: Color) -> void:
+	var a := skip_hint_alpha()
+	if a <= 0.0:
+		return
+	var text := "Tap Skip to skip practice" if TutorialUI.is_touch() else "S to skip"
+	draw_string(ThemeDB.fallback_font, pos, text, HORIZONTAL_ALIGNMENT_CENTER, w, 18, Color(ink, 0.6 * a))
+
+
 ## The "watch" panel: same spot and style as the practice panel.
 func _draw_demo() -> void:
 	var font := ThemeDB.fallback_font
-	var box := Rect2(VP.x - 400, 24, 376, 150)
+	var box := Rect2(VP.x - 400, 24, 376, 196)
 	var ink := Color(0.2, 0.14, 0.12)
 	draw_style_box(_panel_sb, box)
 	draw_string(font, Vector2(box.position.x, box.position.y + 52), "WATCH!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 38, ink)
-	draw_string(font, Vector2(box.position.x, box.position.y + 92), "Cue sound... then catch!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 22, ink)
-	draw_string(font, Vector2(box.position.x, box.position.y + 132), ("Tap Skip to skip practice" if TutorialUI.is_touch() else "Press S to skip practice"), HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, Color(ink, 0.6))
+	draw_string(font, Vector2(box.position.x, box.position.y + 90), "Cue sound... then catch!", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 22, ink)
+	_draw_catch_key(box.position.x, box.position.y + 140, box.size.x)
 
 
 ## Practice shots: the caption, TAP box and closing square (TutorialUI -- the

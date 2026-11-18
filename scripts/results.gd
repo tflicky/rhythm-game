@@ -8,7 +8,9 @@ extends Node
 ## Each level adds one of these as a child, calls draw_percent() from its own
 ## drawing every frame the results are up (the count starts on the first call),
 ## and reset() when the level restarts.
-## Finishing with 100% saves a gold star for the level (Settings.set_perfect).
+## Your best percent is saved per level (Settings.record_percent): 70%+ puts a
+## checkmark on the level's menu card, 100% a gold star (Settings.set_perfect).
+## Once the number has slammed down, any key / click / tap goes to the main menu.
 ##
 ## The drum roll is your sound: res://audio/sfx/drum_roll.wav (or .ogg / .mp3).
 ## Until that file exists a plain synth roll stands in.
@@ -25,6 +27,7 @@ const SLAM := 0.1             ## ...and slamming back down
 const SETTLE := 0.4           ## the squash + shake dying away after the slam
 const BIG := 1.8              ## how big it gets at the top of the swell
 const FONT_SIZE := 84
+const MENU_SCENE := "res://MainMenu.tscn"
 
 var _t0 := -1                 ## ticks (ms) when the results appeared; -1 = not yet
 var _pct := 0
@@ -53,6 +56,37 @@ func _ready() -> void:
 	if _roll.stream == null:
 		_roll.stream = _synth_roll(COUNT_MAX)
 	_roll.volume_db = -6.0
+
+
+## While the results are up, every key / click / tap is ours: during the count it
+## does nothing (so a late press can't skip it), after the slam it goes back to
+## the main menu. _input runs before the level's _unhandled_input, so the level
+## never sees these presses.
+func _input(e: InputEvent) -> void:
+	if _t0 < 0:
+		return
+	var press: bool = (e is InputEventKey and e.pressed and not e.echo) \
+		or (e is InputEventMouseButton and e.pressed) \
+		or (e is InputEventScreenTouch and e.pressed) \
+		or (e is InputEventJoypadButton and e.pressed)
+	if not press:
+		return
+	get_viewport().set_input_as_handled()
+	if done():
+		Transition.go(MENU_SCENE)
+
+
+## True once the count, swell and slam have all played.
+func done() -> bool:
+	if _t0 < 0:
+		return false
+	var t := (Time.get_ticks_msec() - _t0) / 1000.0
+	return t >= _count_time() + _half_beat() + RISE + SLAM
+
+
+## The hint under the percent: blank while it counts, then "press any key".
+func hint() -> String:
+	return "Press any key" if done() else ""
 
 
 ## Back to "not shown yet" (call when the level restarts).
@@ -86,11 +120,13 @@ func draw_percent(ci: CanvasItem, font: Font, center: Vector2, got: int, total: 
 		_t0 = Time.get_ticks_msec()
 		_pct = percent(got, total)
 		_roll.play()
-		# a perfect run: the level gets its gold star on the menu
-		if total > 0 and got >= total and ci.is_inside_tree():
+		# save the score: 70%+ = a checkmark on the menu, a perfect run = a gold star
+		if ci.is_inside_tree():
 			var scene := ci.get_tree().current_scene
 			if scene and not scene.scene_file_path.is_empty():
-				Settings.set_perfect(scene.scene_file_path)
+				Settings.record_percent(scene.scene_file_path, _pct)
+				if total > 0 and got >= total:
+					Settings.set_perfect(scene.scene_file_path)
 	var t := (Time.get_ticks_msec() - _t0) / 1000.0
 	var ct := _count_time()
 	# the count: an ease-out, so it races at first and creeps in at the end

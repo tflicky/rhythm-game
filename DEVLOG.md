@@ -676,3 +676,37 @@ the placeholder boxes (the rabbit, flying squirrel and rope squirrel are gone: *
 - Going straight from practice into the song made the song's first burgers count as missed
   (the frame was still using the practice clock). Fixed by ending that frame early.
 - The new animals were only in Krita's autosave at first, until the .kra got saved.
+
+## Checkmarks and stars on the menu, any key to go back (Nov 17)
+
+*"when a level is completed it should take you to the main menu after you click any key, if
+the player beats the level (at least 70%) the player gets a checkmark on the corner of the
+game on the main menu screen, if they get 100% they get a star"*
+
+- **Your best percent is saved per level** (`Settings.record_percent` / `best_percent`, in
+  `user://settings.cfg` next to the calibration).
+- **Back to the menu from the results.** Once the percent has counted up and slammed down,
+  "Press any key" shows and any key, click, tap or gamepad button fades back to the menu.
+  Presses during the count are swallowed so a late tap can't skip it. This lives in
+  `Results`, so all three levels got it at once and "Tap to play again" is gone (R still
+  restarts during play and from the pause menu).
+- **Menu badges.** 70%+ puts a green checkmark in the card's top-right corner, 100% the gold
+  star instead. Drawn in code until `art/menu/check.png` exists, like the star.
+- Menu cards: the picked card now bobs up and down on the beat as a whole box (its icon
+  settles), and Calibrate / Credits pop out a little on hover.
+
+**Also in this commit (earlier work, not committed until now)**
+- Pause menu: Continue counts 3, 2, 1, GO! and the song comes back on GO!, from the start of
+  the beat it was paused in.
+- Grill Master: anti-mash. A press just too early fumbles the next burger (it burns), so
+  spamming SPACE no longer works; in practice shots extra presses spoil the try. The animals
+  take their relaxed timings unless the next burger for that bun is close; the squirrel now
+  comes up from the front of the screen and hops onto the table.
+- Monkey Business: coconuts to bananas carry on over the same practice click, and the skip
+  hint only fades in after your first try at a catch.
+
+**What broke and how it got fixed**
+- The new input check in `Results` didn't parse (Godot couldn't infer the type of an `or`
+  chain of `is` checks). Fixed by typing it as `bool`.
+- Levels you passed before today show no checkmark yet: old percents were never saved. Old
+  100% stars still show.

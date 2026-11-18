@@ -42,3 +42,19 @@ static func set_perfect(scene: String) -> void:
 	cfg.load(PATH)   # keep any other keys; a missing file is fine
 	cfg.set_value("perfect", scene, true)
 	cfg.save(PATH)
+
+
+## Your best percent on a level, by scene path (0 if never finished).
+## 70+ = passed: the menu gives it a checkmark.
+static func best_percent(scene: String) -> int:
+	var cfg := ConfigFile.new()
+	return int(cfg.get_value("best", scene, 0)) if cfg.load(PATH) == OK else 0
+
+
+## Keeps the higher of the old best and `pct`.
+static func record_percent(scene: String, pct: int) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(PATH)   # keep any other keys; a missing file is fine
+	if pct > int(cfg.get_value("best", scene, 0)):
+		cfg.set_value("best", scene, pct)
+		cfg.save(PATH)

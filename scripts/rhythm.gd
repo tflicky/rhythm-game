@@ -35,7 +35,8 @@ enum Phase { DEMO, PRACTICE, TRANSITION, SONG, SHOT, CARD }
 ## ...starting on this beat.
 @export var practice_first_beat: float = 4.0
 ## Practice runs over a metronome (not the song) this many beats long, then loops.
-@export var practice_metronome_beats: int = 64
+## Coconuts -> bananas carry on over the same click, it doesn't start over.
+@export var practice_metronome_beats: int = 256
 @export var practice_metronome_db: float = -8.0
 ## Seconds between passing a checkpoint and the next one (or the song) starting,
 ## so the fruit already in the air comes down first.
@@ -180,7 +181,10 @@ func _queue_shot(step: int, retry: bool) -> void:
 
 func _process(_dt: float) -> void:
 	if _skip_btn:
-		_skip_btn.visible = _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION, Phase.SHOT]
+		# shown (fading in) only a while after the first try at a catch -- it works before that too
+		var a: float = game.skip_hint_alpha()
+		_skip_btn.visible = a > 0.0 and _phase in [Phase.DEMO, Phase.PRACTICE, Phase.TRANSITION, Phase.SHOT]
+		_skip_btn.modulate.a = a
 	if _phase != Phase.SHOT or _shot_next_at < 0.0 or Conductor.song_position < _shot_next_at:
 		return
 	_shot_next_at = -1.0
@@ -216,6 +220,13 @@ func _start_practice(kind := "catch") -> void:
 	game.banner = ""
 	if _metronome == null:
 		_metronome = ClickTrack.make(Conductor.bpm, practice_metronome_beats, Conductor.beats_per_measure, Conductor.first_beat_offset)
+	# Already clicking (coconuts -> bananas)? Keep the same metronome going and
+	# start the bananas on the next practice slot, a bar or so ahead.
+	if Conductor.playing and audio.stream == _metronome:
+		var ahead := Conductor.song_position_in_beats + 4.0 - practice_first_beat
+		var from := practice_first_beat + ceilf(ahead / practice_every) * practice_every
+		game.begin(_practice_cues(from))
+		return
 	audio.stream = _metronome
 	audio.volume_db = practice_metronome_db
 	Conductor.play()
@@ -224,10 +235,10 @@ func _start_practice(kind := "catch") -> void:
 
 ## One coconut (or one banana pair, a beat apart) every practice_every beats
 ## across the metronome track; it loops until the player gets enough clean catches.
-func _practice_cues() -> Array:
+func _practice_cues(from := -1.0) -> Array:
 	var out: Array = []
 	var song_beats := float(practice_metronome_beats)
-	var b := practice_first_beat
+	var b := practice_first_beat if from < 0.0 else from
 	while b < song_beats - 2.0:
 		var beats := [b] if _practice_kind == "catch" else [b, b + 1.0]
 		for x in beats:

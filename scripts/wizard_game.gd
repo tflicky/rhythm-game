@@ -1164,7 +1164,7 @@ func _draw_results() -> void:
 	_text("TOWER DEFENDED!" if _tally["Miss"] <= 6 else "THE TOWER IS SCORCHED", Vector2(576, 210), 32, INK, true)
 	var got: int = _tally["Perfect"] + _tally["Good"]
 	_results.draw_percent(self, _font, Vector2(576, 320), got, got + _tally["Miss"])
-	_text("Tap to play again", Vector2(576, 440), 18, INK.lightened(0.4), true)
+	_text(_results.hint(), Vector2(576, 440), 18, INK.lightened(0.4), true)
 
 
 # --- helpers ---------------------------------------------------------------------

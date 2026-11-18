@@ -48,8 +48,14 @@ const INK := Color(0.2, 0.14, 0.12)
 const STAR_ART := "res://art/menu/star.png"
 const STAR_R := 34.0                   ## star size (radius, px)
 const GOLD := Color(1.0, 0.8, 0.15)
+## The checkmark on a level you've passed (PASS_PCT or better, not yet 100%).
+## Drawn in code until CHECK_ART exists; same box as the star.
+const CHECK_ART := "res://art/menu/check.png"
+const PASS_PCT := 70
+const CHECK_GREEN := Color(0.3, 0.72, 0.32)
 
 var _cards: Array[Button] = []
+var _small_buttons: Array[Button] = []   ## Calibrate + Credits: they pop out a little on hover
 var _bg: Control
 var _music: AudioStreamPlayer
 var _t := 0.0
@@ -134,6 +140,7 @@ func _ready() -> void:
 	buttons.add_child(cal)
 	buttons.add_child(credits)
 	col.add_child(buttons)
+	_small_buttons = [cal, credits]
 
 	var hint := Label.new()
 	hint.text = "Tap a game to play  -  II (or Esc) in a level to pause"
@@ -213,6 +220,16 @@ func _make_card(lvl: Dictionary) -> Button:
 		star.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		star.draw.connect(_draw_star.bind(star))
 		b.add_child(star)
+	# passed it (70%+) but not perfect: a green checkmark in the same corner
+	elif built and Settings.best_percent(lvl["scene"]) >= PASS_PCT:
+		var check := Control.new()
+		check.name = "Star"                    # same sway + beat pop as the star
+		check.size = Vector2(STAR_R, STAR_R) * 2.0
+		check.pivot_offset = check.size / 2.0
+		check.position = Vector2(CARD.x - STAR_R * 1.35, -STAR_R * 0.65)
+		check.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		check.draw.connect(_draw_check.bind(check))
+		b.add_child(check)
 
 	b.pressed.connect(_play.bind(lvl["scene"]))
 	b.mouse_entered.connect(func(): if not b.disabled: b.grab_focus())
@@ -274,24 +291,27 @@ func _beat() -> float:
 func _process(dt: float) -> void:
 	_t += dt
 	var beat := _beat()
-	var phase := fposmod(beat, 1.0)
-	var hit := pow(1.0 - phase, 3.0)            # 1 on the beat, easing off
-	var tilt_dir := 1.0 if int(floor(beat)) % 2 == 0 else -1.0
 	for i in _cards.size():
 		var c := _cards[i]
 		var picked := c.has_focus()
-		var lift := -12.0 if picked else 0.0
-		var s := 1.06 + 0.035 * hit if picked else 1.0
-		c.position.y = lerpf(c.position.y, 12.0 + lift, 1.0 - exp(-dt * 14.0))
+		# the picked card lifts and bobs up and down on the beat, the whole box
+		var lift := -12.0 - 8.0 * absf(sin(PI * beat)) if picked else 0.0
+		var s := 1.06 if picked else 1.0
+		c.position.y = lerpf(c.position.y, 12.0 + lift, 1.0 - exp(-dt * 20.0))
 		c.scale = c.scale.lerp(Vector2(s, s), 1.0 - exp(-dt * 18.0))
-		c.rotation_degrees = 2.5 * tilt_dir * hit if picked else 0.0
-		# every icon bobs, each a little behind the one before
+		c.rotation_degrees = 0.0
+		# every icon bobs, each a little behind the one before -- except the picked
+		# one, which settles while its whole card bobs instead
 		var icon := c.get_node("Icon") as Control
-		icon.position.y = 32.0 - 6.0 * absf(sin(PI * (beat - i * 0.25)))
-		var star := c.get_node_or_null("Star") as Control
-		if star:                                   # a little sway, a pop on the beat
-			star.rotation_degrees = 8.0 * sin(PI * beat * 0.5)
-			star.scale = Vector2.ONE * (1.0 + 0.08 * hit)
+		if picked:
+			icon.position.y = lerpf(icon.position.y, 32.0, 1.0 - exp(-dt * 14.0))
+		else:
+			icon.position.y = 32.0 - 6.0 * absf(sin(PI * (beat - i * 0.25)))
+	# Calibrate / Credits pop out a little while hovered (or picked with the keys)
+	for b in _small_buttons:
+		b.pivot_offset = b.size / 2.0
+		var bs := 1.1 if b.has_focus() else 1.0
+		b.scale = b.scale.lerp(Vector2(bs, bs), 1.0 - exp(-dt * 18.0))
 
 
 ## The gold star: your drawing if STAR_ART exists, else a 5-point star in code.
@@ -314,6 +334,30 @@ func _draw_star(c: Control) -> void:
 	c.draw_polyline(pts, INK, 4.0, true)
 	# a small shine on the upper left
 	c.draw_circle(mid + Vector2(-STAR_R * 0.18, -STAR_R * 0.2), STAR_R * 0.12, Color(1, 1, 1, 0.75))
+
+
+## The checkmark: your drawing if CHECK_ART exists, else a green badge with a
+## white tick, drawn in code.
+func _draw_check(c: Control) -> void:
+	var box := Rect2(Vector2.ZERO, c.size)
+	if ResourceLoader.exists(CHECK_ART):
+		var tex: Texture2D = load(CHECK_ART)
+		var k := minf(box.size.x / tex.get_width(), box.size.y / tex.get_height())
+		var sz := Vector2(tex.get_width(), tex.get_height()) * k
+		c.draw_texture_rect(tex, Rect2(box.get_center() - sz * 0.5, sz), false)
+		return
+	var mid := box.get_center()
+	var r := STAR_R * 0.8
+	c.draw_circle(mid, r + 3.0, INK)
+	c.draw_circle(mid, r, CHECK_GREEN)
+	var tick := PackedVector2Array([
+		mid + Vector2(-0.45, 0.02) * r,
+		mid + Vector2(-0.12, 0.36) * r,
+		mid + Vector2(0.48, -0.32) * r,
+	])
+	c.draw_polyline(tick, Color.WHITE, r * 0.26, true)
+	# a small shine on the upper left
+	c.draw_circle(mid + Vector2(-r * 0.42, -r * 0.45), r * 0.12, Color(1, 1, 1, 0.6))
 
 
 ## Soft top-to-bottom gradient, BG_TOP to BG_BOTTOM.

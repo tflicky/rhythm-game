@@ -1,9 +1,9 @@
 class_name PauseMenu
 extends CanvasLayer
 ## Esc in a level: everything freezes (the music too) and this asks
-## Continue / Retry / Quit. Continue counts you back in -- 3, 2, 1 on the beat,
-## lined up with where the music stopped, so the song comes back right on the
-## next beat after "1".
+## Continue / Retry / Quit. Continue counts you back in -- 3, 2, 1, GO! on the
+## beat -- and the song comes back on GO!, from the start of the beat it was
+## paused in.
 ##
 ## A level hooks it up with one line in _ready:
 ##     _pause = PauseMenu.attach(self, _restart)
@@ -21,6 +21,8 @@ var _count_label: Label
 var _tick: AudioStreamPlayer
 var _ticks_at: Array = []              ## ms (ticks) of each count beat still to come
 var _resume_at := -1                   ## ms when the music comes back; -1 = not counting
+var _go_at := -1                       ## ms "GO!" goes up -- the music comes back then; -1 = not showing
+var _rewind := 0.0                     ## seconds the song backs up on GO!, to the start of the beat it paused in
 var _pause_button: Button              ## the "II" in the corner, for phones (no Esc key)
 
 
@@ -53,8 +55,10 @@ func open() -> void:
 		return
 	_pause_button.visible = false
 	_resume_at = -1
+	_go_at = -1
 	_ticks_at.clear()
 	_count_label.visible = false
+	_count_label.modulate.a = 1.0
 	get_tree().paused = true
 	_root.visible = true
 	_buttons[0].grab_focus()
@@ -66,15 +70,16 @@ func _continue() -> void:
 	if not Conductor.playing or Conductor.seconds_per_beat <= 0.0:
 		get_tree().paused = false            # nothing playing (a card): just carry on
 		return
-	# Count in on the beat. The music stopped `f` of the way through a beat, so
-	# once it's back, its next beat comes (1 - f) beats later. Put the count on
-	# the beats before that one: the song picks up as if it never stopped.
+	# Count in on the beat: 3, 2, 1, then GO! -- and the song comes back right on
+	# GO!. It stopped `f` of the way through a beat, so it backs up that little
+	# bit to the start of that beat: the beat you hear on GO! is a real one.
 	var spb := Conductor.seconds_per_beat
 	var f := fposmod((Conductor.song_position - Conductor.first_beat_offset) / spb, 1.0)
+	_rewind = f * spb
 	var now := Time.get_ticks_msec()
 	var first := 150.0                    # ms before the first count, so it doesn't snap
-	var next_beat := first + COUNT * spb * 1000.0      # where the song's next beat lands
-	_resume_at = now + int(next_beat - (1.0 - f) * spb * 1000.0)
+	_go_at = now + int(first + COUNT * spb * 1000.0)
+	_resume_at = _go_at
 	_ticks_at.clear()
 	for i in COUNT:
 		_ticks_at.append(now + int(first + i * spb * 1000.0))
@@ -97,32 +102,51 @@ func _close() -> void:
 	_pause_button.visible = true
 	_count_label.visible = false
 	_resume_at = -1
+	_go_at = -1
 	_ticks_at.clear()
 	get_tree().paused = false
 
 
 func _process(_dt: float) -> void:
-	if _resume_at < 0:
-		return
 	var now := Time.get_ticks_msec()
+	# GO!: back up to the start of the beat we paused in, and let the music go
+	if _resume_at >= 0 and now >= _resume_at:
+		_resume_at = -1
+		get_tree().paused = false
+		var sp := Conductor.stream_player
+		if is_instance_valid(sp) and _rewind > 0.0:
+			sp.seek(maxf(sp.get_playback_position() - _rewind, 0.0))
+			Conductor.song_position -= _rewind
+			Conductor.song_position_in_beats = (Conductor.song_position - Conductor.first_beat_offset) / Conductor.seconds_per_beat
+	if _go_at < 0:
+		return
+	var spb_ms := Conductor.seconds_per_beat * 1000.0
+	if now >= _go_at:
+		var kg := (now - _go_at) / spb_ms    # beats since GO!
+		if kg >= 1.0:
+			_count_label.visible = false
+			_count_label.modulate.a = 1.0
+			_count_label.set_meta("last", -1)
+			_go_at = -1
+			return
+		_count_label.visible = true
+		_count_label.text = "GO!"
+		_count_label.scale = Vector2.ONE * (1.0 + 0.4 * exp(-kg * 7.0))
+		_count_label.modulate.a = 1.0 - clampf((kg - 0.5) / 0.5, 0.0, 1.0)   # fades over its 2nd half-beat
+		return
 	# show 3, 2, 1 -- each from its own beat, with a tick
 	var shown := -1
 	for i in COUNT:
 		if now >= _ticks_at[i]:
 			shown = i
 	if shown >= 0:
-		var k := (now - int(_ticks_at[shown])) / (Conductor.seconds_per_beat * 1000.0)
+		var k := (now - int(_ticks_at[shown])) / spb_ms
 		_count_label.visible = true
 		_count_label.text = str(COUNT - shown)
 		_count_label.scale = Vector2.ONE * (1.0 + 0.4 * exp(-k * 7.0))
 		if _count_label.get_meta("last", -1) != shown:
 			_count_label.set_meta("last", shown)
 			_tick.play()
-	if now >= _resume_at:
-		_count_label.visible = false
-		_count_label.set_meta("last", -1)
-		_resume_at = -1
-		get_tree().paused = false
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -133,6 +157,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif _resume_at >= 0:                 # Esc during the count-in: back to the menu
 		_resume_at = -1
+		_go_at = -1
 		_count_label.visible = false
 		_count_label.set_meta("last", -1)
 		_root.visible = true
