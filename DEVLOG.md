@@ -710,3 +710,86 @@ game on the main menu screen, if they get 100% they get a star"*
   chain of `is` checks). Fixed by typing it as `bool`.
 - Levels you passed before today show no checkmark yet: old percents were never saved. Old
   100% stars still show.
+
+## Monkey tutorial shows the key, 3-2-1-GO! on Continue, and a calmer menu (Nov 17)
+
+**Monkey Business tutorial**
+- *"for the monkey tutorial say, Spacebar to catch but for mobile its tap"*. The WATCH! and
+  practice panels first got a "Spacebar to catch" / "Tap to catch" line. Then *"replace the
+  spacebar text with the space key shape thing we made"*: it's now the orange key box from
+  the other tutorials, **[SPACE] to catch** (**[TAP] to catch** on a phone).
+- *"get rid of the CATCH IT"*: the practice panel is just the key, the fruit counter and the
+  skip hint now.
+- *"dont restart the metronome for the banana, key it consistent"*: going from coconuts to
+  bananas used to start the click over. Now the same click keeps going and the bananas come
+  in on the next slot. The practice click is longer too (64 → 256 beats), so it doesn't loop
+  mid-practice.
+- *"say S to skip but only after like 5 seconds and have it fade in, always make it
+  pressable but dont display that it is until theyve given the catching a try"*. S (and the
+  phone's Skip button) works the whole time. The hint only fades in 5 seconds after your
+  first press.
+- *"get rid of the countdown at the start of the monkey level"*: the song just starts now
+  (the `count_in` setting is off).
+
+**Pause menu**
+- *"when the player goes back to the game from the pause menu it should be 3 2 1 GO not just
+  start on 1"*: Continue counts 3, 2, 1, **GO!**.
+- *"only continue the song when go is displayed"*. The game stays frozen until GO!. To keep
+  the beat on GO!, the song backs up to the start of the beat you paused in (less than a
+  beat) and comes back on it.
+
+**Main menu**
+- *"when i hover over an icon in the main menu stop the up and down motion"*. Then
+  *"actually i dont like the wiggle just make the box move up and down instead"*: the picked
+  card's icon holds still, and the whole card lifts and bobs up and down on the beat. The
+  tilt and pop are gone.
+- *"for when the player hovers over the credits or calibrate timing make it pop out a little
+  bit"*: they grow about 10% on hover.
+- *"dont make the star badge move"*: the gold star stays still now.
+
+**Also in this commit (uncommitted work from before today's session):** grill anti-mash
+(stray early presses burn the next burger), the burger thieves take their time unless the
+next burger's coming, a checkmark on menu cards for 70%+, and any key on the results
+screen goes back to the menu.
+
+**What broke and how it got fixed**
+- The first version brought the music back a fraction of a beat *before* GO!, so the beat
+  landed on GO! but the song was already playing during "1". Now it waits for GO! and
+  rewinds that fraction instead.
+
+## Mom vs. the grill: no more mashing, a clearer tutorial, and calmer critters (Nov 17)
+
+I handed Grill Master to my mom and *"she was very confused on how it worked and ended up
+spamming the spacebar to flip all of them really fast and it worked"*. So: *"can we fix both
+the tutorial and not let players spam it"*.
+
+**No more mashing**
+- Before, a press with nothing to flip was free, so mashing always landed a press inside
+  every burger's timing window. Now a press that's *just* too early (0.15–0.4 s before the
+  beat) **fumbles** the burger and it burns. A mash always puts a press there first.
+- Tested with a script: mashing every 80 ms got **0 of 20** burgers. Pressing on the beat
+  (even 0.1 s early) got **20 of 20**. Later a perfect run through the whole song: 54/54.
+
+**The tutorial explains itself**
+- Extra presses fail a practice try, and "Try again!" says why: *Too early! Wait for the box.*
+  / *Too late! Press as it closes.* / *Only press when the box closes!*
+- Words float up over the burger in practice: Nice!, A bit early, Too late!, Not yet!
+- *"put little 4321 countdowns for the burgers that fall on the grill"*: in practice each
+  burger counts 4, 3, 2, 1 on the beat after it lands, and you flip on the next beat.
+
+**The table**
+- *"get rid of the salt and pepper on the table"* -- gone.
+- *"you can remove the bun for the bird because he catches it anyway"* -- and then *"spread
+  out the buns now that the bird doesnt need one"*: three buns, spread out across the table.
+
+**Critters take their time**
+- *"make the squirrel running up animation a little slower, only make the animations fast if
+  the beat demands it otherwise I want ample time for them to be on screen"*. Every animal
+  now has a relaxed speed (about 1.5x longer) and only hurries when the next burger for its
+  bun would land first. In the real song none of them ever needs to hurry.
+
+**What broke and how it got fixed**
+- *"the squirrel and the bear overlap weirdly for a second and i cant figure out why"*.
+  Screenshots showed it: the squirrel ran in from the left, the same side the bear stands
+  on, right through his body. Now the squirrel runs up from the front of the screen.
+  (Flipped back to face right as I drew it; its tail just brushes the bear's leg now.)
