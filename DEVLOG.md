@@ -634,3 +634,45 @@ the gnomes hands"*: they sit where they are in my Krita file.
   than my latest Krita save, so the game had the raccoon without his arms. Re-exported it
   from `krita animation.kra` with `tools/kra_export.ps1`; Grill Master uses it too. His
   grab spot was measured on the old drawing, so check one raccoon steal by eye.
+
+## My animals steal the burgers, the tongs clap, and tutorials roll straight into the song (Nov 17)
+
+I drew the burger thieves in Krita: a bear, a raccoon, a bird and a squirrel. They replaced
+the placeholder boxes (the rabbit, flying squirrel and rope squirrel are gone: *"just my 4"*).
+
+- **The bear.** *"I want him to come in from the left and eat the burger."* He leans in from
+  behind the picnic table. Then *"make his other layer arm tilt up and grab the burger"*: my
+  second bear layer became his arm (`bear_arm.png`), which swings up around his shoulder,
+  grabs the burger, lifts it to his mouth, chomp, chew, and he backs out.
+- **The bird** catches the patty mid-flip, and it shrinks into its beak so it *"looks more
+  like its in his mouth"*.
+- **The raccoon** pops up behind the table: *"make the raccoon bring it towards himself then
+  pull it under the table"*.
+- **The squirrel** runs in on the grass, hops onto the end of the table and runs along it:
+  *"make the squirrel run up the table instead of his floating run"*.
+- **One animal per bun** (my pick), each from its own side, so they stop piling up when it
+  gets hectic: bun 1 bear, 2 squirrel, 3 raccoon, 4 bird. The buns got spread out along the table.
+- **Slower**: *"its more fun to see them full come in and out it happens to fast"*.
+
+**Other changes**
+- An empty press now plays my tong clap frames: *"make the tongs do the clap together
+  animation when I click and theres nothing to do"*.
+- *"when the player completes the tutorial have it segue into the actual game, dont make
+  them have to tap to start"*: Grill Master, Monkey Business and Wizard Tower all go
+  straight into the song now. In the grill tutorial the animals finish leaving before the
+  next try.
+- Buns: *"make the buns more visible on the table"*. Outlines (*"dont look good"*) and paper
+  plates (*"look bad"*) were tried and removed; the buns got toasted darker in code instead.
+  Then *"the bottom buns kindof look canoe shaped"*, so I drew an "only bottom bun" layer
+  and it's now the empty bun.
+
+**What broke and how it got fixed**
+- The bear's front leg was drawn in front of the table so it landed on the bench, and his
+  leg got cut off by the table mask (*"the bear looks like hes clipping through the table"*,
+  *"the bears foot gets cut off"*). Now only the raccoon is masked; the bear sits behind the
+  table and the table art covers him.
+- The raccoon showed through under the tabletop (*"looks weird glitching through the
+  table"*). He's now masked below the table's front edge and stands behind its back edge.
+- Going straight from practice into the song made the song's first burgers count as missed
+  (the frame was still using the practice clock). Fixed by ending that frame early.
+- The new animals were only in Krita's autosave at first, until the .kra got saved.

@@ -190,7 +190,8 @@ func _process(_dt: float) -> void:
 		_queue_shot(1, false)
 	else:
 		_practice_passed = true
-		_show_title()
+		Conductor.stop()
+		_start_song()                  # straight into the song, no "tap to start"
 
 
 ## After the practice shots: "MONKEY BUSINESS / Tap to start".

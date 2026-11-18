@@ -816,7 +816,7 @@ func _process(_delta: float) -> void:
 		elif _demo_step == 0:
 			_start_demo(1)                   # now the other element
 		else:
-			_end_demo()
+			_start()                         # both done: straight into the song, no "tap to start"
 	if (_phase == Phase.PLAY or _phase == Phase.DEMO or _phase == Phase.RECORD) and Conductor.playing:
 		var pos := Conductor.song_position
 		var v := Conductor.visual_position
