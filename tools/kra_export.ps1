@@ -1,4 +1,7 @@
-param([string]$Kra, [string]$OutDir)
+param([string]$Kra, [string]$OutDir, [string]$Flat)
+# -Flat <name>: instead of per-layer frames, save the whole picture as it looks in
+# Krita (all visible layers) to <OutDir>/<name>.png at half size. For backgrounds:
+#   kra_export.ps1 -Kra "art/monkey/monkey background.kra" -OutDir art/monkey -Flat background
 # Exports every animated paint layer of a Krita .kra as transparent PNG frames,
 # applying each layer's HSV/HSL filter mask. Frames of one layer share a crop box
 # so they stay aligned; boxes are written to frames.json (canvas coordinates).
@@ -49,6 +52,16 @@ public static class Kra {
       px[o + 2] = (byte)Math.Round(255 * f(hk + 1.0/3)); px[o + 1] = (byte)Math.Round(255 * f(hk)); px[o] = (byte)Math.Round(255 * f(hk - 1.0/3));
     }
   }
+  // Moves the yellow pixels inside the rect (canvas px) out of px into a new layer.
+  public static byte[] SplitYellow(byte[] px, int W, int H, int rx0, int ry0, int rx1, int ry1) {
+    var o = new byte[px.Length];
+    for (int y = Math.Max(0, ry0); y <= Math.Min(H - 1, ry1); y++) for (int x = Math.Max(0, rx0); x <= Math.Min(W - 1, rx1); x++) {
+      int i = (y * W + x) * 4; int b = px[i], g = px[i + 1], r = px[i + 2], a = px[i + 3];
+      if (a == 0 || r < 150 || g < 130 || b > 0.6 * g) continue;
+      for (int ch = 0; ch < 4; ch++) { o[i + ch] = px[i + ch]; px[i + ch] = 0; }
+    }
+    return o;
+  }
   public static int[] Bounds(byte[] px, int W, int H) {
     int x0 = W, y0 = H, x1 = -1, y1 = -1;
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) if (px[(y * W + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
@@ -83,13 +96,32 @@ public static class Kra {
 $z = [IO.Compression.ZipFile]::OpenRead($Kra)
 function ReadEntry($name) { $e = $z.GetEntry($name); $ms = New-Object IO.MemoryStream; $s = $e.Open(); $s.CopyTo($ms); $s.Close(); return ,$ms.ToArray() }
 function ReadText($name) { return [Text.Encoding]::UTF8.GetString((ReadEntry $name)) }
+if ($Flat) {
+  $ms = New-Object IO.MemoryStream (,(ReadEntry 'mergedimage.png'))
+  $full = [Drawing.Bitmap]::FromStream($ms)
+  $half = New-Object Drawing.Bitmap ([int][Math]::Ceiling($full.Width / 2)), ([int][Math]::Ceiling($full.Height / 2))
+  $g = [Drawing.Graphics]::FromImage($half)
+  $g.InterpolationMode = 'HighQualityBicubic'; $g.PixelOffsetMode = 'HighQuality'
+  $g.DrawImage($full, 0, 0, $half.Width, $half.Height)
+  New-Item -ItemType Directory -Force $OutDir | Out-Null
+  $out = Join-Path (Resolve-Path $OutDir) "$Flat.png"
+  $half.Save($out, [Drawing.Imaging.ImageFormat]::Png)
+  "{0}: {1}x{2} (flattened)" -f $out, $half.Width, $half.Height
+  $g.Dispose(); $half.Dispose(); $full.Dispose(); $z.Dispose()
+  return
+}
 $doc = [xml](ReadText 'maindoc.xml')
 $img = $doc.DOC.IMAGE
 $W = [int]$img.width; $H = [int]$img.height; $base = $img.name
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $meta = @{ canvas = @($W, $H); layers = @{} }
+# The yellow cannon-shot lines are painted on the 'wizard tower' layer; they're cut out
+# into their own cannon_shot.png so the game can flash them only when the cannon fires.
+# If the .kra ever gets a real 'cannon shot' layer, that one is used instead.
+$SHOT_RECT = @(2700, 900, 3100, 1150)   # canvas area above the cannon (clear of the yellow window)
+$hasShotLayer = @($img.layers.layer | Where-Object { $_.name.Trim() -eq 'cannon shot' }).Count -gt 0
 foreach ($L in $img.layers.layer) {
-  if ($L.nodetype -ne 'paintlayer' -or $L.name -eq 'Background') { continue }
+  if ($L.nodetype -ne 'paintlayer' -or $L.name -ceq 'Background') { continue }
   $name = ($L.name -replace '\d+$','').Trim() -replace ' ','_'   # fireball2 -> fireball, gnome hands -> gnome_hands
   $hsl = $null
   if ($L.masks) { foreach ($m in $L.masks.mask) { if ($m.filtername -eq 'hsvadjustment' -and $m.visible -eq '1') {
@@ -104,6 +136,15 @@ foreach ($L in $img.layers.layer) {
   foreach ($f in $frames) {
     $px = [Kra]::Decode((ReadEntry "$base/layers/$($f[0])"), $W, $H, $f[1], $f[2])
     if ($hsl) { [Kra]::Hsl($px, [double]$hsl.h, [double]$hsl.s / 100.0, [double]$hsl.v / 100.0) }
+    if ($name -eq 'wizard_tower' -and -not $hasShotLayer) {
+      $shot = [Kra]::SplitYellow($px, $W, $H, $SHOT_RECT[0], $SHOT_RECT[1], $SHOT_RECT[2], $SHOT_RECT[3])
+      $sb = [Kra]::Bounds($shot, $W, $H)
+      if ($sb[2] -ge 0) {
+        [Kra]::Save($shot, $W, $sb, (Join-Path $OutDir 'cannon_shot.png'))
+        $meta.layers['cannon_shot'] = @{ box = $sb; files = @('cannon_shot.png') }
+        "cannon_shot: split from wizard tower, box {0}" -f ($sb -join ',')
+      }
+    }
     $b = [Kra]::Bounds($px, $W, $H)
     if ($b[2] -ge 0) { $box = @([Math]::Min($box[0],$b[0]), [Math]::Min($box[1],$b[1]), [Math]::Max($box[2],$b[2]), [Math]::Max($box[3],$b[3])) }
     $decoded += ,$px

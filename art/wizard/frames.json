@@ -4,6 +4,28 @@
                    2480
                ],
     "layers":  {
+                   "cannon_shot":  {
+                                       "box":  [
+                                                   2849,
+                                                   971,
+                                                   2955,
+                                                   1084
+                                               ],
+                                       "files":  [
+                                                     "cannon_shot.png"
+                                                 ]
+                                   },
+                   "wizard_tower":  {
+                                        "box":  [
+                                                    16,
+                                                    1072,
+                                                    3507,
+                                                    1880
+                                                ],
+                                        "files":  [
+                                                      "wizard_tower.png"
+                                                  ]
+                                    },
                    "iceball":  {
                                    "box":  [
                                                1695,
@@ -81,6 +103,17 @@
                                                      "gnome_hands.png"
                                                  ]
                                    },
+                   "background":  {
+                                      "box":  [
+                                                  0,
+                                                  0,
+                                                  3507,
+                                                  2479
+                                              ],
+                                      "files":  [
+                                                    "background.png"
+                                                ]
+                                  },
                    "wand":  {
                                 "box":  [
                                             452,

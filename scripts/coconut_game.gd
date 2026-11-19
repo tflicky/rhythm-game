@@ -93,6 +93,12 @@ enum Anchor { CENTER, BOTTOM }
 ## that line is pinned to the ocean's horizon, so the wave rises out of the sea.
 @export var surf_waterline := 0.745
 @export var surf_bob := 5.0                 ## px the wave bobs on each beat
+## With a drawn background: where its sea starts (the horizon), as a fraction of the
+## picture's height from the top. Measured from monkey background.kra (y 1530 of 2480).
+@export var art_horizon := 0.617
+## With a drawn background: how far below that horizon the wave sits (screen px),
+## so there's sea all around its base instead of it balancing on the horizon line.
+@export var surf_depth := 22.0
 ## Fraction of the art's height (from the top) to draw. Everything below is
 ## plain sea, so it's left to the ocean strip. Keep it a little below
 ## surf_waterline so the wave's base still overlaps the horizon.
@@ -132,6 +138,9 @@ enum Anchor { CENTER, BOTTOM }
 @export var sfx_catch_on_beat := true
 
 const ART_DIR := "res://art/"
+## Other levels' folders (under art/ and audio/sfx/): never searched, so their files
+## (e.g. the Wizard's background.png) can't land in a monkey slot by sharing a name.
+const OTHER_LEVEL_DIRS := ["wizard", "grilling", "grill", "menu"]
 const IMG_EXT := ["png", "webp", "jpg", "jpeg", "svg", "bmp"]
 const AUTO := {
 	"art_background": "background.png", "art_ground": "ground.png",
@@ -253,7 +262,7 @@ func _scan_dir(dir_path: String, exts: Array) -> Dictionary:
 	for entry in ResourceLoader.list_directory(dir_path):
 		var full := dir_path.path_join(entry.trim_suffix("/"))
 		if entry.ends_with("/"):
-			if not entry.begins_with("."):
+			if not entry.begins_with(".") and entry.trim_suffix("/") not in OTHER_LEVEL_DIRS:
 				out.merge(_scan_dir(full, exts), true)
 			continue
 		var stem := entry
@@ -684,10 +693,13 @@ func _draw_background() -> void:
 	else:
 		draw_rect(Rect2(Vector2.ZERO, VP), Color(0.53, 0.79, 0.92))
 	# sky -> ocean -> surfer -> shore foam -> sand: the wave rises out of the
-	# sea, and its base disappears behind the beach
-	_draw_ocean()
+	# sea, and its base disappears behind the beach. A drawn background has its
+	# own sea and shoreline, so the code-drawn ones are only for the placeholder.
+	if not art_background:
+		_draw_ocean()
 	_draw_surfer()
-	_draw_shore_foam()
+	if not art_background:
+		_draw_shore_foam()
 	if not art_background:
 		draw_rect(Rect2(0, ground_y, VP.x, VP.y - ground_y), Color(0.93, 0.85, 0.62))
 	if art_ground:
@@ -695,6 +707,8 @@ func _draw_background() -> void:
 
 
 func _sea_y() -> float:
+	if art_background:
+		return VP.y * art_horizon
 	return ground_y - ocean_height
 
 
@@ -752,7 +766,8 @@ func _draw_surfer() -> void:
 	var ph := fposmod(beat, 1.0)
 	var bob := -surf_bob * sin(ph * PI)                     # lifts on every beat, settles between
 	var tilt := 0.015 * sin(beat * PI * 0.5)                # slow rock across each 2-beat swell
-	var anchor := Vector2(x, _sea_y() + 2.0 + bob)          # = the art's waterline
+	var depth := surf_depth if art_background else 2.0
+	var anchor := Vector2(x, _sea_y() + depth + bob)        # = the art's waterline
 	draw_set_transform(anchor, tilt, Vector2.ONE)
 	# Only draw the art down to just below its waterline. The flat sea under it
 	# is the same colour as the ocean strip, but drawing it would paint over the

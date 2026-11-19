@@ -820,3 +820,41 @@ it was picked up, then removed.
 
 **What broke:** nothing. One mix-up: the banana sound got listed as "silent" when
 it actually reuses my thunk at a higher pitch -- corrected.
+
+## My own Wizard scene, a cannon on the tower, and my beach behind the monkeys (Nov 18, evening)
+
+*"i added my own art in the wizard basics in krita"*. Two new layers in
+`art/wizard/wizard basics.kra`: **background** (night sky, stars, hills, grass, my
+vine-covered wall) and **wizard tower** (the enemy tower with the wizard in the
+window). They replace the code-drawn sky, tower and battlements. Later updates:
+green hills and more grass.
+
+**The cannon.** *"make the fireballs and iceballs come out of the cannon at the top"*.
+Balls now leave the cannon mouth on the roof (`CANNON`), heading out the way the
+barrel points (`CANNON_DIR`), then swoop down at the gnome. Then I drew a **cannon
+shot** (yellow lines over the barrel). It's painted on the tower layer, so the
+exporter cuts the yellow pixels above the cannon out into `cannon_shot.png`, and the
+game flashes it on each shot and fades it out over ~1/4 s.
+
+**Sky gradient.** *"can you also give the sky a gradient going darker as it
+approaches the top of the screen"*. A shader darkens only pixels that are my sky
+colour, so the stars and hills keep their brightness (`SKY_TOP_DARK`, `SKY_FADE_END`).
+
+**Monkey beach.** *"i added monkey background but now you gotta make sure that the
+surfing guy is on the water"*. `monkey background.kra` is exported flat to
+`art/monkey/background.png` (new `-Flat` option in `tools/kra_export.ps1`). With it,
+the game stops drawing its own sea strip and foam, and the surfer rides 22 px below
+my horizon (`art_horizon`, `surf_depth`). My sea blue matched the surfing drawing's
+exactly, so the wave blends right in.
+
+**What broke and how it got fixed**
+- The exporter skipped my `background` layer: it was meant to skip Krita's white
+  `Background` layer, but the name check ignored capitals. Now it's case-sensitive.
+- *"why is the wizard background in the monkey level"*. The monkey level searches
+  all of `art/` by file name, and the Wizard export had just made
+  `art/wizard/background.png`. The monkey level now skips the other levels' folders
+  (wizard, grilling, grill, menu).
+
+**To-do list update:** Wizard sky, hills, enemy tower and wall, and the monkey beach
+background are now drawn by me. Still to draw: monkey ground, bonk stars, dust puff;
+grill field backdrop; menu star + checkmark.

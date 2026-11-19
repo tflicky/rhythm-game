@@ -112,7 +112,8 @@ const FADE := 0.1
 ## Fallback canvas boxes if frames.json is missing (top-left of each layer).
 const BOX := {"wand": Vector2(452, 1775), "fireball": Vector2(1695, 469),
 	"iceball": Vector2(1695, 469), "firespell": Vector2(388, 551), "icespell": Vector2(388, 566),
-	"gnome": Vector2(0, 1772), "gnome_hands": Vector2(609, 2115)}
+	"gnome": Vector2(0, 1772), "gnome_hands": Vector2(609, 2115),
+	"background": Vector2(0, 0), "wizard_tower": Vector2(162, 1072), "cannon_shot": Vector2(2840, 971)}
 const PRACTICE_CLICK_BEATS := 256  ## practice metronome length (about 2 1/2 minutes at 110 BPM)
 const WALK_IN := 3.0               ## seconds the gnome takes to walk up to his spot when the game starts
 const WALK_FROM := Vector2(-330, 240)  ## where he walks in from (screen px, bottom left)
@@ -121,8 +122,10 @@ const EYES_SHUT_HURT := 0.35       ## ...and this long when a ball gets through
 
 ## --- scene layout (screen px) -------------------------------------------------
 const HORIZON := 430.0
-const ENEMY := Vector2(1010, 430)  ## base of the enemy tower, far away on the horizon
-const ENEMY_TOP := Vector2(1010, 352)
+const ENEMY := Vector2(982, 394)   ## base of the enemy tower, far away on the horizon (drawn tower)
+const ENEMY_TOP := Vector2(986, 302)  ## the lit window with the enemy wizard
+const CANNON := Vector2(966, 193)     ## mouth of the cannon on the tower roof: balls fire from here
+const CANNON_DIR := Vector2(-0.64, -0.77)  ## the way the drawn barrel points (up and left)
 const WALL_Y := 572.0
 const COL := {"fire": Color(1.0, 0.42, 0.14), "ice": Color(0.45, 0.78, 1.0)}
 const SKY := Color(0.106, 0.122, 0.231)
@@ -172,6 +175,7 @@ func _ready() -> void:
 	# the art is drawn big and shown small: mipmaps stop it shimmering as it scales
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_load_art()
+	_make_sky()
 	for k in ["fire", "ice", "hurt"]:
 		_sfx[k] = _synth(k)
 	for k in ["fire", "ice"]:
@@ -903,7 +907,51 @@ func _draw() -> void:
 		_draw_results()
 
 
+## The Krita background (sky, stars, hills, your wall) lives on its own child node so
+## a shader can darken the sky toward the top of the screen. Only pixels in the sky's
+## own colour are darkened, so the stars and hills keep their brightness.
+const ART_SKY := Color8(36, 36, 74)  ## the flat sky colour painted in the background layer
+const SKY_TOP_DARK := 0.4            ## sky brightness at the very top (1.0 = as painted)
+const SKY_FADE_END := 340.0          ## screen y where the gradient has faded back to the painted colour
+const SKY_SHADER := """
+shader_type canvas_item;
+uniform vec3 sky_col;
+uniform float top_dark;
+uniform float fade_end;
+varying float y;
+void vertex() { y = VERTEX.y; }
+void fragment() {
+	vec4 c = COLOR;
+	float is_sky = 1.0 - smoothstep(0.04, 0.12, distance(c.rgb, sky_col));
+	float t = 1.0 - clamp(y / fade_end, 0.0, 1.0);
+	c.rgb *= mix(1.0, top_dark, t * is_sky);
+	COLOR = c;
+}
+"""
+
+func _make_sky() -> void:
+	if _tex["background"].is_empty():
+		return
+	var sky := Node2D.new()
+	sky.show_behind_parent = true      # under everything this level draws
+	var sh := Shader.new()
+	sh.code = SKY_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("sky_col", Vector3(ART_SKY.r, ART_SKY.g, ART_SKY.b))
+	mat.set_shader_parameter("top_dark", SKY_TOP_DARK)
+	mat.set_shader_parameter("fade_end", SKY_FADE_END)
+	sky.material = mat
+	sky.draw.connect(func() -> void:
+		var tex: Texture2D = _tex["background"][0]
+		sky.draw_rect(Rect2(-20, -20, VP.x + 40, VP.y + 40), ART_SKY)   # bleed for screen shake
+		sky.draw_texture_rect(tex, Rect2(_c2s(_box["background"]), tex.get_size() * TEX_SCALE * K), false))
+	add_child(sky)
+
+
 func _draw_backdrop(pulse: float) -> void:
+	if not _tex["background"].is_empty():
+		return                         # drawn by the sky node (_make_sky)
 	draw_rect(Rect2(-20, -20, VP.x + 40, VP.y + 40), SKY)
 	for s in _stars:
 		draw_circle(Vector2(s.x, s.y), s.z, Color(1, 1, 1, 0.45 + 0.4 * pulse * (s.z / 2.2)))
@@ -925,6 +973,16 @@ func _draw_enemy(v: float) -> void:
 		if d >= 0.0 and d < 0.25:
 			flash = 1.0 - d / 0.25
 			fc = COL[b["kind"]]
+	if not _tex["wizard_tower"].is_empty():
+		_draw_layer(_tex["wizard_tower"][0], "wizard_tower", Vector2.ZERO)
+		if flash > 0.0:            # muzzle flash as the cannon fires: your drawn shot, or a plain puff
+			if not _tex["cannon_shot"].is_empty():
+				var tex: Texture2D = _tex["cannon_shot"][0]
+				draw_texture_rect(tex, Rect2(_c2s(_box["cannon_shot"]), tex.get_size() * TEX_SCALE * K),
+					false, Color(1, 1, 1, flash))
+			else:
+				draw_circle(CANNON, 6 + 16 * flash, Color(fc, 0.7 * flash))
+		return
 	var haze := Color(0.42, 0.36, 0.48)
 	var squash := 1.0 - 0.08 * flash
 	var top := ENEMY.y - (ENEMY.y - ENEMY_TOP.y) * squash
@@ -939,7 +997,9 @@ func _draw_enemy(v: float) -> void:
 ## Control points of a ball's arc (cubic Bezier), shifted sideways by its lane.
 func _arc(b: Dictionary) -> Array:
 	var dx: float = (b["lane"] - 1.5) * LANE_SPREAD
-	return [ENEMY_TOP + Vector2(0, -8), Vector2(ENEMY_TOP.x + 60.0 + dx * 0.6, APEX_Y),
+	# leaves the cannon along its barrel, then swoops down at you
+	var up := (CANNON.y - APEX_Y) / -CANNON_DIR.y
+	return [CANNON, Vector2(CANNON.x + CANNON_DIR.x * up + dx * 0.6, APEX_Y),
 		Vector2(_impact_s.x + 240.0 + dx, APEX_Y), _impact_s]
 
 
@@ -1074,13 +1134,14 @@ func _draw_layer(tex: Texture2D, layer: String, shift: Vector2) -> void:
 func _draw_wall() -> void:
 	var stone := Color(0.42, 0.44, 0.52)
 	var dark := Color(0.32, 0.33, 0.41)
-	draw_rect(Rect2(-20, WALL_Y, VP.x + 40, VP.y - WALL_Y + 20), stone)
-	draw_rect(Rect2(-20, WALL_Y, VP.x + 40, 8), dark)
-	var x := -30.0
-	while x < VP.x:
-		draw_rect(Rect2(x, WALL_Y - 46, 84, 48), stone)
-		draw_rect(Rect2(x, WALL_Y - 46, 14, 48), dark)
-		x += 150.0
+	if _tex["background"].is_empty():     # the drawn background has its own wall
+		draw_rect(Rect2(-20, WALL_Y, VP.x + 40, VP.y - WALL_Y + 20), stone)
+		draw_rect(Rect2(-20, WALL_Y, VP.x + 40, 8), dark)
+		var x := -30.0
+		while x < VP.x:
+			draw_rect(Rect2(x, WALL_Y - 46, 84, 48), stone)
+			draw_rect(Rect2(x, WALL_Y - 46, 14, 48), dark)
+			x += 150.0
 	for sc in _scars:
 		var c: Color = Color(0.12, 0.08, 0.07, 0.75) if sc["kind"] == "fire" else Color(0.85, 0.95, 1.0, 0.75)
 		_ellipse(Vector2(sc["x"], WALL_Y + 30), Vector2(26, 11), c)
